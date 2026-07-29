@@ -243,6 +243,10 @@
       display: flex; align-items: center; justify-content: flex-end; gap: 10px;
     }
     .form-actions button { min-width: 118px; }
+    .expense-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .expense-actions button { min-width: 148px; }
+    .currency-setting-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .currency-setting-chips .chip { width: 100%; border-radius: 14px; text-align: center; }
     .manage-list { display: grid; gap: 8px; margin-bottom: 10px; }
     .manage-item {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -344,14 +348,12 @@
       <div class="topbar-row">
         <div class="topbar-line-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="7" width="14" height="13" rx="3"></rect>
-            <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7"></path>
-            <path d="M9 11v5M15 11v5"></path>
+            <path d="M22 2 9.7 14.3"></path>
+            <path d="m22 2-7.4 20-4.2-7.7L2 10.4 22 2Z"></path>
           </svg>
         </div>
         <div class="title-wrap">
           <h1 id="appTitle">旅行記帳</h1>
-          <p id="tripHeader">正在讀取旅程…</p>
         </div>
         <button id="networkPill" class="status-pill" type="button">讀取中</button>
       </div>
@@ -408,6 +410,11 @@
         <form id="expenseForm" class="card">
           <input id="expenseId" type="hidden" />
           <div class="field">
+            <label for="expenseDate">日期</label>
+            <input id="expenseDate" type="date" required />
+          </div>
+
+          <div class="field">
             <label for="expenseAmount">金額</label>
             <div class="amount-row">
               <input id="expenseAmount" class="amount-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" required />
@@ -432,16 +439,11 @@
           </div>
 
           <div class="field">
-            <label for="expenseDate">日期</label>
-            <input id="expenseDate" type="date" required />
-          </div>
-
-          <div class="field">
             <label for="expenseNote">備註</label>
             <textarea id="expenseNote" placeholder="可輸入店家、地點或其他說明"></textarea>
           </div>
 
-          <div class="button-row">
+          <div class="expense-actions">
             <button id="cancelExpenseEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
             <button id="saveExpenseBtn" class="primary-btn" type="submit">儲存記帳</button>
           </div>
@@ -460,7 +462,7 @@
       <section id="page-more" class="page">
         <div class="section-head"><div><h2>更多功能</h2></div></div>
         <div class="more-menu">
-          <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-3a1.8 1.8 0 0 0 0 3.6h4M12 7.8v8.4"></path></svg></div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
+          <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M15.5 8.3c-.8-.8-1.9-1.2-3.4-1.2-1.9 0-3.2 1-3.2 2.5 0 1.4 1.1 2.2 3.3 2.6 2.1.4 3.1 1.2 3.1 2.6 0 1.5-1.3 2.6-3.3 2.6-1.5 0-2.8-.5-3.7-1.4"></path><path d="M12 5.5v13"></path></svg></div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
           <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
           <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
           <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
@@ -533,7 +535,14 @@
 
           <div class="field">
             <label>啟用幣別</label>
-            <div id="currencySettingChips" class="chips"></div>
+            <div id="currencySettingChips" class="chips currency-setting-chips">
+              <button type="button" class="chip" data-setting-currency="TWD">TWD 新台幣</button>
+              <button type="button" class="chip" data-setting-currency="JPY">JPY 日圓</button>
+              <button type="button" class="chip" data-setting-currency="KRW">KRW 韓元</button>
+              <button type="button" class="chip" data-setting-currency="VND">VND 越南盾</button>
+              <button type="button" class="chip" data-setting-currency="USD">USD 美元</button>
+              <button type="button" class="chip" data-setting-currency="EUR">EUR 歐元</button>
+            </div>
           </div>
           <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency" required></select></div>
 
@@ -617,10 +626,8 @@
       USD: { name: "美元", symbol: "US$", decimals: 2 },
       EUR: { name: "歐元", symbol: "€", decimals: 2 }
     };
-    const CURRENCIES = {
-      ...DEFAULT_CURRENCIES,
-      ...((APP_CONFIG && APP_CONFIG.supportedCurrencies) || {})
-    };
+    // 本 App 固定支援以下六種常用幣別，避免舊版設定檔格式造成「啟用幣別」空白。
+    const CURRENCIES = DEFAULT_CURRENCIES;
     const APP_NAME = String(APP_CONFIG?.appName || "旅行記帳").replaceAll("旅途", "旅行");
 
     const state = {
@@ -941,7 +948,6 @@
     }
 
     function renderHeader() {
-      $("tripHeader").textContent = state.trip?.name || "新的旅程";
       $("currentUserLine").textContent = state.user ? `${state.user.displayName || "Google 使用者"}｜${state.user.email || ""}` : "";
     }
 
@@ -1405,10 +1411,10 @@
       state.settingsDraftMembers = [...state.trip.members];
       state.settingsDraftCategories = [...state.trip.categories];
       state.selectedSettingCurrencies = new Set(
-        state.trip.enabledCurrencies.filter((code) => CURRENCIES[code])
+        state.trip.enabledCurrencies.filter((code) => DEFAULT_CURRENCIES[code])
       );
       if (!state.selectedSettingCurrencies.size) {
-        state.selectedSettingCurrencies.add(CURRENCIES[state.trip.primaryCurrency] ? state.trip.primaryCurrency : "TWD");
+        state.selectedSettingCurrencies.add(DEFAULT_CURRENCIES[state.trip.primaryCurrency] ? state.trip.primaryCurrency : "TWD");
       }
       renderMemberManageList();
       renderCategoryManageList();
@@ -1511,12 +1517,17 @@
     }
 
     function renderCurrencySettingChips() {
-      $("currencySettingChips").innerHTML = Object.entries(CURRENCIES).map(([code, meta]) => `
+      const container = $("currencySettingChips");
+      if (!container) return;
+
+      // 直接重建六個固定選項，避免瀏覽器快取或舊設定檔讓區塊變成空白。
+      container.innerHTML = Object.entries(DEFAULT_CURRENCIES).map(([code, meta]) => `
         <button type="button" class="chip ${state.selectedSettingCurrencies.has(code) ? "active" : ""}" data-setting-currency="${code}">${code} ${escapeHtml(meta.name)}</button>
       `).join("");
-      const enabled = Object.keys(CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
+
+      const enabled = Object.keys(DEFAULT_CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
-      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(CURRENCIES[currency].name)}</option>`).join("");
+      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(DEFAULT_CURRENCIES[currency].name)}</option>`).join("");
       $("primaryCurrency").value = enabled.includes(current) ? current : enabled[0] || "";
     }
 
