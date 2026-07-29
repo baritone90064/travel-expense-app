@@ -8,10 +8,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="旅行記帳" />
   <meta name="format-detection" content="telephone=no" />
-  <link rel="apple-touch-icon" href="app-icon.png" />
-  <link rel="icon" href="app-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-v5.png?v=5" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=5" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=5" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v4：旅程設定與各模組即時連動 -->
+  <!-- iPhone 修正版 v5：修正 Firebase 持久化、幣別點選與 App Icon 快取 -->
 
   <style>
     :root {
@@ -247,15 +248,15 @@
     .expense-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .expense-actions button { min-width: 148px; }
     .currency-setting-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .currency-choice {
-      min-width: 0; min-height: 50px; border: 1px solid #d8d3c7; border-radius: 14px;
-      background: #fff; display: flex; align-items: center; gap: 9px; padding: 9px 11px; cursor: pointer;
+    .currency-setting-chips .chip {
+      width: 100%; min-height: 48px; border-radius: 14px; text-align: center;
+      border: 1px solid var(--line); background: #fff; color: var(--text);
+      font-weight: 760; padding: 10px 8px;
     }
-    .currency-choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--primary); flex: 0 0 auto; }
-    .currency-choice span { min-width: 0; display: grid; line-height: 1.15; }
-    .currency-choice strong { font-size: 14px; }
-    .currency-choice small { margin-top: 3px; color: var(--muted); font-size: 11px; }
-    .currency-choice:has(input:checked) { background: var(--primary-soft); border-color: #cbd5a4; }
+    .currency-setting-chips .chip.active {
+      background: var(--primary); color: #fff; border-color: var(--primary);
+      box-shadow: 0 7px 18px rgba(83, 97, 42, .18);
+    }
     .member-select-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .member-choice {
       min-width: 0; min-height: 44px; border: 1px solid #d8d3c7; border-radius: 14px;
@@ -555,14 +556,7 @@
 
           <div class="field">
             <label>啟用幣別</label>
-            <div id="currencySettingChips" class="currency-setting-chips">
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="TWD" /><span><strong>TWD</strong><small>新台幣</small></span></label>
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="JPY" /><span><strong>JPY</strong><small>日圓</small></span></label>
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="KRW" /><span><strong>KRW</strong><small>韓元</small></span></label>
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="VND" /><span><strong>VND</strong><small>越南盾</small></span></label>
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="USD" /><span><strong>USD</strong><small>美元</small></span></label>
-              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="EUR" /><span><strong>EUR</strong><small>歐元</small></span></label>
-            </div>
+            <div id="currencySettingChips" class="currency-setting-chips" aria-label="啟用幣別"></div>
           </div>
           <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency" required></select></div>
 
@@ -650,6 +644,24 @@
     const CURRENCIES = DEFAULT_CURRENCIES;
     const DEFAULT_CATEGORIES = ["餐飲", "交通", "住宿", "景點門票", "購物", "娛樂", "網路／SIM 卡", "保險", "簽證", "小費", "手續費", "其他"];
     const APP_NAME = String(APP_CONFIG?.appName || "旅行記帳").replaceAll("旅途", "旅行");
+    const CURRENT_TRIP_KEY = "travel-ledger:current-trip-id:v5";
+    const TRIP_SNAPSHOT_KEY = "travel-ledger:trip-settings-snapshot:v5";
+
+    function saveLocalTripState(tripId, tripData = null) {
+      if (tripId) localStorage.setItem(CURRENT_TRIP_KEY, tripId);
+      if (tripId && tripData) {
+        localStorage.setItem(TRIP_SNAPSHOT_KEY, JSON.stringify({ id: tripId, data: tripData }));
+      }
+    }
+
+    function loadLocalTripState() {
+      let snapshot = null;
+      try { snapshot = JSON.parse(localStorage.getItem(TRIP_SNAPSHOT_KEY) || "null"); } catch {}
+      return {
+        tripId: localStorage.getItem(CURRENT_TRIP_KEY) || snapshot?.id || "",
+        snapshot
+      };
+    }
 
     function uniqueTextList(value, fallback = []) {
       const list = Array.isArray(value) ? value : fallback;
@@ -824,8 +836,43 @@
 
     async function ensureInitialData() {
       const settingsRef = doc(db, "appSettings", "main");
-      const settingsSnap = await getDoc(settingsRef);
-      if (settingsSnap.exists() && settingsSnap.data().currentTripId) return settingsSnap.data();
+      const local = loadLocalTripState();
+      let settingsSnap = null;
+
+      // 每次重新開啟 App 時，優先向 Firebase 伺服器讀取目前旅程指標，避免只讀到舊快取。
+      try {
+        settingsSnap = navigator.onLine ? await getDocFromServer(settingsRef) : await getDoc(settingsRef);
+      } catch (error) {
+        console.warn("Server settings read failed; trying cache:", error);
+        try { settingsSnap = await getDoc(settingsRef); } catch {}
+      }
+
+      if (settingsSnap?.exists() && settingsSnap.data().currentTripId) {
+        const settings = settingsSnap.data();
+        saveLocalTripState(settings.currentTripId);
+        return settings;
+      }
+
+      // 若伺服器指標暫時讀不到，先使用上次已成功儲存的旅程 ID，並修復 appSettings/main。
+      if (local.tripId) {
+        try {
+          const tripRef = doc(db, "trips", local.tripId);
+          const tripSnap = navigator.onLine ? await getDocFromServer(tripRef) : await getDoc(tripRef);
+          if (tripSnap.exists()) {
+            const repairedSettings = {
+              currentTripId: local.tripId,
+              exchangeRates: { TWD: 1 },
+              exchangeRateDate: "",
+              exchangeRateUpdatedAt: ""
+            };
+            if (navigator.onLine) await setDoc(settingsRef, repairedSettings, { merge: true });
+            saveLocalTripState(local.tripId, tripSnap.data());
+            return repairedSettings;
+          }
+        } catch (error) {
+          console.warn("Local trip pointer recovery failed:", error);
+        }
+      }
 
       if (!(await confirmServerBeforeWrite())) throw new Error("首次使用需要網路連線");
       const tripRef = doc(collection(db, "trips"));
@@ -834,14 +881,18 @@
         startDate: today(),
         endDate: ""
       };
-      await setDoc(tripRef, trip);
       const settings = {
         currentTripId: tripRef.id,
         exchangeRates: { TWD: 1 },
         exchangeRateDate: "",
         exchangeRateUpdatedAt: ""
       };
-      await setDoc(settingsRef, settings);
+
+      const batch = writeBatch(db);
+      batch.set(tripRef, trip);
+      batch.set(settingsRef, settings, { merge: true });
+      await batch.commit();
+      saveLocalTripState(tripRef.id, trip);
       return settings;
     }
 
@@ -857,6 +908,7 @@
         if (!snap.exists()) return;
         state.settings = { id: snap.id, ...snap.data() };
         state.serverReachable = !snap.metadata.fromCache;
+        if (state.settings.currentTripId) saveLocalTripState(state.settings.currentTripId);
         if (state.currentTripId !== state.settings.currentTripId) {
           state.currentTripId = state.settings.currentTripId;
           subscribeTripCollections();
@@ -866,6 +918,8 @@
         if (navigator.onLine) updateExchangeRatesOnceDaily();
       });
       state.unsubscribers.push(settingsUnsub);
+      // 初始化時 state.currentTripId 已存在；不能只等待 ID 改變，否則關閉重開後不會重新訂閱旅程資料。
+      if (state.currentTripId) subscribeTripCollections();
     }
 
     function subscribeTripCollections() {
@@ -879,6 +933,7 @@
         state.trip = { id: snap.id, ...snap.data() };
         if (snap.metadata.fromCache && !navigator.onLine) state.serverReachable = false;
         normalizeTripState();
+        saveLocalTripState(state.currentTripId, state.trip);
         renderAll();
         updateNetworkUi();
       });
@@ -1579,9 +1634,10 @@
       const container = $("currencySettingChips");
       if (!container) return;
 
-      container.querySelectorAll("[data-setting-currency-input]").forEach((input) => {
-        input.checked = state.selectedSettingCurrencies.has(input.dataset.settingCurrencyInput);
-      });
+      container.innerHTML = Object.entries(DEFAULT_CURRENCIES).map(([code, meta]) => {
+        const active = state.selectedSettingCurrencies.has(code);
+        return `<button type="button" class="chip ${active ? "active" : ""}" data-setting-currency="${code}" aria-pressed="${active}">${code} ${escapeHtml(meta.name)}</button>`;
+      }).join("");
 
       const enabled = Object.keys(DEFAULT_CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
@@ -1622,7 +1678,13 @@
           categories
         };
         const tripRef = doc(db, "trips", state.currentTripId);
-        await setDoc(tripRef, data, { merge: true });
+        const settingsRef = doc(db, "appSettings", "main");
+        const batch = writeBatch(db);
+        batch.set(tripRef, data, { merge: true });
+        // 同一批次同步保存「目前旅程指標」，避免 App 關閉重開後回到新的旅程。
+        batch.set(settingsRef, { currentTripId: state.currentTripId }, { merge: true });
+        await batch.commit();
+        saveLocalTripState(state.currentTripId, data);
 
         // 立即更新目前 App 狀態，讓首頁、記帳、公基金、篩選與結算同步，不必等待監聽器回傳。
         state.trip = { ...(state.trip || {}), id: state.currentTripId, ...data };
@@ -1646,9 +1708,9 @@
         }
 
         button.textContent = "已儲存 ✓";
-        status.textContent = "✓ 旅程設定已儲存，首頁、記帳與公基金已同步";
+        status.textContent = "✓ 已儲存到 Firebase，關閉重開後仍會保留";
         status.className = "save-status success";
-        toast("旅程設定已儲存並同步");
+        toast("已儲存到 Firebase");
         setTimeout(() => {
           button.textContent = "儲存旅程設定";
           updateNetworkUi();
@@ -1775,6 +1837,19 @@
         return;
       }
 
+      const settingCurrencyButton = event.target.closest("[data-setting-currency]");
+      if (settingCurrencyButton) {
+        const code = settingCurrencyButton.dataset.settingCurrency;
+        if (state.selectedSettingCurrencies.has(code)) {
+          if (state.selectedSettingCurrencies.size === 1) return toast("至少要保留一種幣別");
+          state.selectedSettingCurrencies.delete(code);
+        } else {
+          state.selectedSettingCurrencies.add(code);
+        }
+        renderCurrencySettingChips();
+        return;
+      }
+
       const editMemberIndex = event.target.closest("[data-edit-member-index]")?.dataset.editMemberIndex;
       if (editMemberIndex !== undefined) return editDraftMember(Number(editMemberIndex));
       const deleteMemberIndex = event.target.closest("[data-delete-member-index]")?.dataset.deleteMemberIndex;
@@ -1802,21 +1877,6 @@
         else state.selectedShareMembers.delete(member);
         renderShareMemberChips();
         return;
-      }
-
-      const currencyInput = event.target.closest("[data-setting-currency-input]");
-      if (currencyInput) {
-        const code = currencyInput.dataset.settingCurrencyInput;
-        if (currencyInput.checked) {
-          state.selectedSettingCurrencies.add(code);
-        } else {
-          if (state.selectedSettingCurrencies.size === 1 && state.selectedSettingCurrencies.has(code)) {
-            currencyInput.checked = true;
-            return toast("至少要保留一種幣別");
-          }
-          state.selectedSettingCurrencies.delete(code);
-        }
-        renderCurrencySettingChips();
       }
     });
 
@@ -1893,6 +1953,7 @@
         const settings = await ensureInitialData();
         state.settings = settings;
         state.currentTripId = settings.currentTripId;
+        saveLocalTripState(state.currentTripId);
         await subscribeData();
         updateNetworkUi();
       } catch (error) {
