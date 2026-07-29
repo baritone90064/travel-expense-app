@@ -11,6 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon.png" />
   <link rel="icon" href="app-icon.png" />
   <title>旅行記帳</title>
+  <!-- iPhone 修正版 v4：旅程設定與各模組即時連動 -->
 
   <style>
     :root {
@@ -246,7 +247,26 @@
     .expense-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .expense-actions button { min-width: 148px; }
     .currency-setting-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .currency-setting-chips .chip { width: 100%; border-radius: 14px; text-align: center; }
+    .currency-choice {
+      min-width: 0; min-height: 50px; border: 1px solid #d8d3c7; border-radius: 14px;
+      background: #fff; display: flex; align-items: center; gap: 9px; padding: 9px 11px; cursor: pointer;
+    }
+    .currency-choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--primary); flex: 0 0 auto; }
+    .currency-choice span { min-width: 0; display: grid; line-height: 1.15; }
+    .currency-choice strong { font-size: 14px; }
+    .currency-choice small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .currency-choice:has(input:checked) { background: var(--primary-soft); border-color: #cbd5a4; }
+    .member-select-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .member-choice {
+      min-width: 0; min-height: 44px; border: 1px solid #d8d3c7; border-radius: 14px;
+      background: #fff; display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+    }
+    .member-choice input { width: 19px; height: 19px; margin: 0; accent-color: var(--primary); flex: 0 0 auto; }
+    .member-choice span { min-width: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 750; }
+    .member-choice:has(input:checked) { background: var(--primary-soft); border-color: #cbd5a4; }
+    .share-all-btn { grid-column: 1 / -1; min-height: 40px; border: 1px solid #d8d3c7; border-radius: 14px; background: #fff; color: var(--primary-dark); font-weight: 750; }
+    .fund-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .fund-actions button { min-width: 148px; }
     .manage-list { display: grid; gap: 8px; margin-bottom: 10px; }
     .manage-item {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -502,7 +522,7 @@
             <label for="fundNote">備註</label>
             <input id="fundNote" type="text" placeholder="選填" />
           </div>
-          <div class="form-actions">
+          <div class="fund-actions">
             <button id="cancelFundEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
             <button id="saveFundBtn" class="primary-btn" type="submit">儲存</button>
           </div>
@@ -535,13 +555,13 @@
 
           <div class="field">
             <label>啟用幣別</label>
-            <div id="currencySettingChips" class="chips currency-setting-chips">
-              <button type="button" class="chip" data-setting-currency="TWD">TWD 新台幣</button>
-              <button type="button" class="chip" data-setting-currency="JPY">JPY 日圓</button>
-              <button type="button" class="chip" data-setting-currency="KRW">KRW 韓元</button>
-              <button type="button" class="chip" data-setting-currency="VND">VND 越南盾</button>
-              <button type="button" class="chip" data-setting-currency="USD">USD 美元</button>
-              <button type="button" class="chip" data-setting-currency="EUR">EUR 歐元</button>
+            <div id="currencySettingChips" class="currency-setting-chips">
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="TWD" /><span><strong>TWD</strong><small>新台幣</small></span></label>
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="JPY" /><span><strong>JPY</strong><small>日圓</small></span></label>
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="KRW" /><span><strong>KRW</strong><small>韓元</small></span></label>
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="VND" /><span><strong>VND</strong><small>越南盾</small></span></label>
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="USD" /><span><strong>USD</strong><small>美元</small></span></label>
+              <label class="currency-choice"><input type="checkbox" data-setting-currency-input="EUR" /><span><strong>EUR</strong><small>歐元</small></span></label>
             </div>
           </div>
           <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency" required></select></div>
@@ -607,7 +627,7 @@
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
       initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager,
-      collection, doc, getDoc, getDocFromCache, getDocs, getDocsFromServer,
+      collection, doc, getDoc, getDocFromCache, getDocFromServer, getDocs, getDocsFromServer,
       setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit,
       writeBatch
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
@@ -628,7 +648,13 @@
     };
     // 本 App 固定支援以下六種常用幣別，避免舊版設定檔格式造成「啟用幣別」空白。
     const CURRENCIES = DEFAULT_CURRENCIES;
+    const DEFAULT_CATEGORIES = ["餐飲", "交通", "住宿", "景點門票", "購物", "娛樂", "網路／SIM 卡", "保險", "簽證", "小費", "手續費", "其他"];
     const APP_NAME = String(APP_CONFIG?.appName || "旅行記帳").replaceAll("旅途", "旅行");
+
+    function uniqueTextList(value, fallback = []) {
+      const list = Array.isArray(value) ? value : fallback;
+      return [...new Set(list.map((item) => String(item ?? "").trim()).filter(Boolean))];
+    }
 
     const state = {
       user: null,
@@ -880,12 +906,29 @@
 
     function normalizeTripState() {
       if (!state.trip) return;
-      state.trip.members = Array.isArray(state.trip.members) && state.trip.members.length ? state.trip.members : ["A", "B"];
-      state.trip.enabledCurrencies = Array.isArray(state.trip.enabledCurrencies) && state.trip.enabledCurrencies.length ? state.trip.enabledCurrencies : ["TWD"];
-      state.trip.categories = Array.isArray(state.trip.categories) && state.trip.categories.length
-        ? state.trip.categories
-        : clone(APP_CONFIG.defaultTrip?.categories || ["餐飲", "交通", "住宿", "景點門票", "購物", "娛樂", "網路／SIM 卡", "保險", "簽證", "小費", "手續費", "其他"]);
-      if (!state.trip.enabledCurrencies.includes(state.trip.primaryCurrency)) state.trip.primaryCurrency = state.trip.enabledCurrencies[0];
+
+      // 相容先前可能使用過的欄位名稱，並保證所有連動選單都有可用資料。
+      const membersSource = state.trip.members ?? state.trip.participants ?? state.trip.memberNames;
+      const currenciesSource = state.trip.enabledCurrencies ?? state.trip.currencies;
+      const categoriesSource = state.trip.categories ?? state.trip.expenseCategories;
+
+      const members = uniqueTextList(membersSource, uniqueTextList(APP_CONFIG.defaultTrip?.members, ["A", "B"]));
+      const enabledCurrencies = uniqueTextList(currenciesSource, uniqueTextList(APP_CONFIG.defaultTrip?.enabledCurrencies, ["TWD", "JPY"]))
+        .filter((code) => Boolean(DEFAULT_CURRENCIES[code]));
+      const categories = uniqueTextList(categoriesSource, uniqueTextList(APP_CONFIG.defaultTrip?.categories, DEFAULT_CATEGORIES));
+
+      state.trip.members = members.length ? members : ["A", "B"];
+      state.trip.enabledCurrencies = enabledCurrencies.length ? enabledCurrencies : ["TWD"];
+      state.trip.categories = categories.length ? categories : [...DEFAULT_CATEGORIES];
+      state.trip.name = String(state.trip.name || "新的旅程").trim() || "新的旅程";
+
+      const requestedPrimary = String(state.trip.primaryCurrency || "");
+      state.trip.primaryCurrency = state.trip.enabledCurrencies.includes(requestedPrimary)
+        ? requestedPrimary
+        : state.trip.enabledCurrencies[0];
+
+      const validSelected = [...state.selectedShareMembers].filter((member) => state.trip.members.includes(member));
+      state.selectedShareMembers = new Set(validSelected.length ? validSelected : state.trip.members);
     }
 
     async function updateExchangeRatesOnceDaily() {
@@ -997,17 +1040,23 @@
     function renderExpenseOptions() {
       const trip = state.trip;
       if (!trip) return;
-      const currentCurrency = $("expenseCurrency").value;
-      $("expenseCurrency").innerHTML = trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
-      if (trip.enabledCurrencies.includes(currentCurrency)) $("expenseCurrency").value = currentCurrency;
+      normalizeTripState();
 
+      const currentCurrency = $("expenseCurrency").value;
+      $("expenseCurrency").innerHTML = trip.enabledCurrencies
+        .map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
+      $("expenseCurrency").value = trip.enabledCurrencies.includes(currentCurrency) ? currentCurrency : trip.primaryCurrency;
+
+      const payerValues = ["FUND", ...trip.members];
       const currentPayer = $("expensePayer").value;
-      $("expensePayer").innerHTML = `<option value="FUND">公基金</option>` + trip.members.map((member) => `<option value="${escapeHtml(member)}">${escapeHtml(member)}代墊</option>`).join("");
-      if (["FUND", ...trip.members].includes(currentPayer)) $("expensePayer").value = currentPayer;
+      $("expensePayer").innerHTML = `<option value="FUND">公基金</option>` + trip.members
+        .map((member) => `<option value="${escapeHtml(member)}">${escapeHtml(member)}代墊</option>`).join("");
+      $("expensePayer").value = payerValues.includes(currentPayer) ? currentPayer : "FUND";
 
       const currentCategory = $("expenseCategory").value;
-      $("expenseCategory").innerHTML = trip.categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
-      if (trip.categories.includes(currentCategory)) $("expenseCategory").value = currentCategory;
+      $("expenseCategory").innerHTML = trip.categories
+        .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
+      $("expenseCategory").value = trip.categories.includes(currentCategory) ? currentCategory : trip.categories[0];
 
       renderShareMemberChips();
     }
@@ -1033,10 +1082,18 @@
 
     function renderShareMemberChips() {
       if (!state.trip) return;
-      if (!state.selectedShareMembers.size) state.trip.members.forEach((member) => state.selectedShareMembers.add(member));
+      normalizeTripState();
+
+      const validSelected = [...state.selectedShareMembers].filter((member) => state.trip.members.includes(member));
+      state.selectedShareMembers = new Set(validSelected.length ? validSelected : state.trip.members);
+
+      $("shareMemberChips").className = "member-select-grid";
       $("shareMemberChips").innerHTML = state.trip.members.map((member) => `
-        <button type="button" class="chip ${state.selectedShareMembers.has(member) ? "active" : ""}" data-share-member="${escapeHtml(member)}">${escapeHtml(member)}</button>
-      `).join("") + `<button type="button" class="chip" data-share-all="true">全選</button>`;
+        <label class="member-choice">
+          <input type="checkbox" data-share-member-input="${escapeHtml(member)}" ${state.selectedShareMembers.has(member) ? "checked" : ""} />
+          <span>${escapeHtml(member)}</span>
+        </label>
+      `).join("") + `<button type="button" class="share-all-btn" data-share-all="true">全選</button>`;
 
       const count = state.selectedShareMembers.size;
       const mode = count === state.trip.members.length ? "全員平均" : count === 1 ? "個人消費" : "指定成員平均";
@@ -1182,8 +1239,10 @@
 
     function renderFundOptions() {
       if (!state.trip) return;
+      normalizeTripState();
       const current = $("fundCurrency").value;
-      $("fundCurrency").innerHTML = state.trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
+      $("fundCurrency").innerHTML = state.trip.enabledCurrencies
+        .map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
       $("fundCurrency").value = state.trip.enabledCurrencies.includes(current) ? current : state.trip.primaryCurrency;
       updateFundPreview();
     }
@@ -1520,14 +1579,14 @@
       const container = $("currencySettingChips");
       if (!container) return;
 
-      // 直接重建六個固定選項，避免瀏覽器快取或舊設定檔讓區塊變成空白。
-      container.innerHTML = Object.entries(DEFAULT_CURRENCIES).map(([code, meta]) => `
-        <button type="button" class="chip ${state.selectedSettingCurrencies.has(code) ? "active" : ""}" data-setting-currency="${code}">${code} ${escapeHtml(meta.name)}</button>
-      `).join("");
+      container.querySelectorAll("[data-setting-currency-input]").forEach((input) => {
+        input.checked = state.selectedSettingCurrencies.has(input.dataset.settingCurrencyInput);
+      });
 
       const enabled = Object.keys(DEFAULT_CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
-      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(DEFAULT_CURRENCIES[currency].name)}</option>`).join("");
+      $("primaryCurrency").innerHTML = enabled
+        .map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(DEFAULT_CURRENCIES[currency].name)}</option>`).join("");
       $("primaryCurrency").value = enabled.includes(current) ? current : enabled[0] || "";
     }
 
@@ -1539,9 +1598,9 @@
       status.textContent = "";
 
       if (!(await confirmServerBeforeWrite())) return;
-      const members = [...state.settingsDraftMembers];
-      const categories = [...state.settingsDraftCategories];
-      const enabledCurrencies = Object.keys(CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
+      const members = uniqueTextList(state.settingsDraftMembers);
+      const categories = uniqueTextList(state.settingsDraftCategories);
+      const enabledCurrencies = Object.keys(DEFAULT_CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       if (!members.length) return toast("至少需要一位旅程成員");
       if (!enabledCurrencies.length) return toast("至少需要啟用一種幣別");
       if (!categories.length) return toast("至少需要一個消費分類");
@@ -1562,16 +1621,38 @@
           primaryCurrency: $("primaryCurrency").value,
           categories
         };
-        await updateDoc(doc(db, "trips", state.currentTripId), data);
+        const tripRef = doc(db, "trips", state.currentTripId);
+        await setDoc(tripRef, data, { merge: true });
+
+        // 立即更新目前 App 狀態，讓首頁、記帳、公基金、篩選與結算同步，不必等待監聽器回傳。
+        state.trip = { ...(state.trip || {}), id: state.currentTripId, ...data };
+        normalizeTripState();
+        state.settingsDraftMembers = [...state.trip.members];
+        state.settingsDraftCategories = [...state.trip.categories];
+        state.selectedSettingCurrencies = new Set(state.trip.enabledCurrencies);
         clearLastEntry();
+        renderAll();
+
+        // 再從 Firebase 伺服器讀回確認，避免只更新到本機快取。
+        try {
+          const confirmed = await getDocFromServer(tripRef);
+          if (confirmed.exists()) {
+            state.trip = { id: confirmed.id, ...confirmed.data() };
+            normalizeTripState();
+            renderAll();
+          }
+        } catch (verifyError) {
+          console.warn("Trip settings server readback failed; local synchronized state is retained:", verifyError);
+        }
+
         button.textContent = "已儲存 ✓";
-        status.textContent = "✓ 旅程設定已儲存";
+        status.textContent = "✓ 旅程設定已儲存，首頁、記帳與公基金已同步";
         status.className = "save-status success";
-        toast("旅程設定已儲存");
+        toast("旅程設定已儲存並同步");
         setTimeout(() => {
           button.textContent = "儲存旅程設定";
           updateNetworkUi();
-        }, 1600);
+        }, 1800);
       } catch (error) {
         console.error("Save settings failed:", error);
         button.textContent = "儲存旅程設定";
@@ -1688,26 +1769,9 @@
       const nav = event.target.closest("[data-nav]")?.dataset.nav;
       if (nav) { navigate(nav); return; }
 
-      const share = event.target.closest("[data-share-member]")?.dataset.shareMember;
-      if (share) {
-        if (state.selectedShareMembers.has(share)) state.selectedShareMembers.delete(share);
-        else state.selectedShareMembers.add(share);
-        renderShareMemberChips();
-        return;
-      }
       if (event.target.closest("[data-share-all]")) {
         state.selectedShareMembers = new Set(state.trip.members);
         renderShareMemberChips();
-        return;
-      }
-
-      const settingCurrency = event.target.closest("[data-setting-currency]")?.dataset.settingCurrency;
-      if (settingCurrency) {
-        if (state.selectedSettingCurrencies.has(settingCurrency)) {
-          if (state.selectedSettingCurrencies.size === 1) return toast("至少要保留一種幣別");
-          state.selectedSettingCurrencies.delete(settingCurrency);
-        } else state.selectedSettingCurrencies.add(settingCurrency);
-        renderCurrencySettingChips();
         return;
       }
 
@@ -1728,6 +1792,32 @@
       if (editFundId) return editFund(editFundId);
       const deleteFundId = event.target.closest("[data-delete-fund]")?.dataset.deleteFund;
       if (deleteFundId) return removeFund(deleteFundId);
+    });
+
+    document.addEventListener("change", (event) => {
+      const shareInput = event.target.closest("[data-share-member-input]");
+      if (shareInput) {
+        const member = shareInput.dataset.shareMemberInput;
+        if (shareInput.checked) state.selectedShareMembers.add(member);
+        else state.selectedShareMembers.delete(member);
+        renderShareMemberChips();
+        return;
+      }
+
+      const currencyInput = event.target.closest("[data-setting-currency-input]");
+      if (currencyInput) {
+        const code = currencyInput.dataset.settingCurrencyInput;
+        if (currencyInput.checked) {
+          state.selectedSettingCurrencies.add(code);
+        } else {
+          if (state.selectedSettingCurrencies.size === 1 && state.selectedSettingCurrencies.has(code)) {
+            currencyInput.checked = true;
+            return toast("至少要保留一種幣別");
+          }
+          state.selectedSettingCurrencies.delete(code);
+        }
+        renderCurrencySettingChips();
+      }
     });
 
     $("googleLoginBtn").addEventListener("click", login);
