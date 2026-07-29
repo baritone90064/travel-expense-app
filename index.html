@@ -67,11 +67,13 @@
       border-bottom: 1px solid rgba(231, 226, 214, .72);
     }
     .topbar-row { display: flex; align-items: center; gap: 12px; }
-    .app-mark {
-      width: 46px; height: 46px; border-radius: 14px; object-fit: cover;
-      box-shadow: 0 5px 15px rgba(58, 64, 42, .18);
-      flex: 0 0 auto;
+    .topbar-line-icon {
+      width: 42px; height: 42px; border-radius: 14px;
+      display: grid; place-items: center; flex: 0 0 auto;
+      color: var(--primary-dark); background: rgba(255, 255, 255, .78);
+      border: 1px solid #ddd8ca;
     }
+    .topbar-line-icon svg { width: 24px; height: 24px; }
     .title-wrap { min-width: 0; flex: 1; }
     .title-wrap h1 { font-size: 19px; margin: 0; letter-spacing: .2px; }
     .title-wrap p { margin: 3px 0 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -113,7 +115,16 @@
     .hero h2 { margin: 5px 0 7px; font-size: 25px; line-height: 1.2; max-width: 78%; }
     .hero-meta { font-size: 13px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .grid-2 > * { min-width: 0; }
+    .date-grid input[type="date"] {
+      min-width: 0; max-width: 100%; width: 100%;
+      padding-left: 9px; padding-right: 7px; font-size: 15px;
+      -webkit-appearance: none; appearance: none;
+    }
+    .date-grid input[type="date"]::-webkit-date-and-time-value {
+      min-width: 0; text-align: left;
+    }
     .card {
       background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
       padding: 15px; box-shadow: 0 7px 20px rgba(70, 68, 55, .055); margin-bottom: 12px;
@@ -153,7 +164,7 @@
     .amount-input { font-size: 25px; font-weight: 800; }
     .hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
 
-    .segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    .segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
     .segment {
       min-height: 42px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
       color: var(--text); font-size: 13px; font-weight: 750; padding: 8px 5px;
@@ -200,9 +211,35 @@
       border: 1px solid var(--line); background: #fff; min-height: 110px; border-radius: 20px; padding: 15px;
       text-align: left; color: var(--text);
     }
-    .more-icon { font-size: 25px; }
+    .more-icon { width: 28px; height: 28px; color: var(--primary-dark); }
+    .more-icon svg { width: 100%; height: 100%; display: block; }
     .more-title { margin-top: 10px; font-weight: 850; }
     .more-note { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+    .form-actions {
+      display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    }
+    .form-actions button { min-width: 118px; }
+    .manage-list { display: grid; gap: 8px; margin-bottom: 10px; }
+    .manage-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      min-height: 48px; padding: 8px 9px 8px 13px;
+      background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    }
+    .manage-name { min-width: 0; font-size: 15px; font-weight: 750; overflow-wrap: anywhere; }
+    .manage-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+    .manage-btn {
+      min-height: 34px; border: 0; border-radius: 10px; padding: 6px 9px;
+      background: #f3f1eb; color: var(--text); font-size: 12px; font-weight: 750;
+    }
+    .manage-btn.delete { color: var(--danger); background: #fff0ee; }
+    .inline-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .inline-add input { min-width: 0; }
+    .inline-add button { min-width: 76px; }
+    .empty-manage {
+      color: var(--muted); text-align: center; font-size: 13px;
+      padding: 14px; border: 1px dashed var(--line); border-radius: 14px;
+    }
 
     .bottom-nav {
       position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 30;
@@ -260,6 +297,11 @@
     .danger-zone { border-color: #efc5c1; background: #fff8f7; }
     .user-line { font-size: 12px; color: var(--muted); word-break: break-all; }
 
+    @media (max-width: 390px) {
+      .date-grid { gap: 7px; }
+      .date-grid input[type="date"] { padding-left: 7px; padding-right: 4px; font-size: 14px; }
+    }
+
     @media (min-width: 720px) {
       #appShell { margin-top: 14px; margin-bottom: 14px; min-height: calc(100dvh - 28px); border-radius: 30px; overflow: hidden; box-shadow: 0 20px 60px rgba(40, 44, 39, .15); }
       .bottom-nav { bottom: 14px; border-radius: 0 0 30px 30px; }
@@ -278,7 +320,13 @@
   <div id="appShell" class="hidden">
     <header class="topbar">
       <div class="topbar-row">
-        <img class="app-mark" src="app-icon.png" alt="App Icon" />
+        <div class="topbar-line-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="7" width="14" height="13" rx="3"></rect>
+            <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7"></path>
+            <path d="M9 11v5M15 11v5"></path>
+          </svg>
+        </div>
         <div class="title-wrap">
           <h1 id="appTitle">旅途記帳</h1>
           <p id="tripHeader">正在讀取旅程…</p>
@@ -388,12 +436,12 @@
       </section>
 
       <section id="page-more" class="page">
-        <div class="section-head"><div><h2>更多功能</h2><p>公基金、統計、設定與匯出</p></div></div>
+        <div class="section-head"><div><h2>更多功能</h2></div></div>
         <div class="more-menu">
-          <button class="more-tile" data-nav="fund"><div class="more-icon">🪙</div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
-          <button class="more-tile" data-nav="stats"><div class="more-icon">📊</div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
-          <button class="more-tile" data-nav="settings"><div class="more-icon">⚙️</div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
-          <button id="exportBtn" class="more-tile"><div class="more-icon">📤</div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
+          <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-3a1.8 1.8 0 0 0 0 3.6h4M12 7.8v8.4"></path></svg></div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
+          <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
+          <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
+          <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
         </div>
         <div class="card" style="margin-top:12px">
           <h3>登入帳號</h3>
@@ -403,7 +451,7 @@
       </section>
 
       <section id="page-fund" class="page">
-        <div class="section-head"><div><h2>公基金</h2><p>每次儲值視為所有旅程成員共同繳交</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <div class="section-head"><div><h2>公基金</h2></div><button class="icon-btn" data-nav="more">返回</button></div>
         <form id="fundForm" class="card">
           <input id="fundId" type="hidden" />
           <div class="field">
@@ -419,7 +467,6 @@
             <div class="segmented">
               <button id="fundModePerPerson" class="segment active" type="button">每人金額</button>
               <button id="fundModeTotal" class="segment" type="button">總金額</button>
-              <button class="segment" type="button" disabled>全員繳交</button>
             </div>
           </div>
           <div class="field">
@@ -431,9 +478,9 @@
             <label for="fundNote">備註</label>
             <input id="fundNote" type="text" placeholder="選填" />
           </div>
-          <div class="button-row">
+          <div class="form-actions">
             <button id="cancelFundEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
-            <button id="saveFundBtn" class="primary-btn" type="submit">儲存公基金</button>
+            <button id="saveFundBtn" class="primary-btn" type="submit">儲存</button>
           </div>
         </form>
         <div id="fundList" class="list"></div>
@@ -445,26 +492,36 @@
       </section>
 
       <section id="page-settings" class="page">
-        <div class="section-head"><div><h2>旅程設定</h2><p>兩位 App 使用者可共同管理同一趟旅行</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <div class="section-head"><div><h2>旅程設定</h2></div><button class="icon-btn" data-nav="more">返回</button></div>
         <form id="settingsForm" class="card">
           <div class="field"><label for="tripName">旅程名稱</label><input id="tripName" type="text" required /></div>
-          <div class="grid-2">
+          <div class="grid-2 date-grid">
             <div class="field"><label for="tripStartDate">開始日期</label><input id="tripStartDate" type="date" /></div>
             <div class="field"><label for="tripEndDate">結束日期</label><input id="tripEndDate" type="date" /></div>
           </div>
+
           <div class="field">
-            <label for="tripMembers">參加成員</label>
-            <textarea id="tripMembers" placeholder="每行一位，例如：&#10;Terry&#10;旅伴"></textarea>
-            <div class="hint">成員名稱會用於支付者、分攤與結算。至少需要一位。</div>
+            <label>參加成員</label>
+            <div id="memberManageList" class="manage-list"></div>
+            <div class="inline-add">
+              <input id="newMemberName" type="text" maxlength="30" placeholder="輸入成員名稱" autocomplete="off" />
+              <button id="addMemberBtn" class="secondary-btn" type="button">新增</button>
+            </div>
           </div>
+
           <div class="field">
             <label>啟用幣別</label>
             <div id="currencySettingChips" class="chips"></div>
           </div>
-          <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency"></select></div>
+          <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency" required></select></div>
+
           <div class="field">
-            <label for="tripCategories">消費分類</label>
-            <textarea id="tripCategories" placeholder="每行一個分類"></textarea>
+            <label>消費分類</label>
+            <div id="categoryManageList" class="manage-list"></div>
+            <div class="inline-add">
+              <input id="newCategoryName" type="text" maxlength="30" placeholder="輸入分類名稱" autocomplete="off" />
+              <button id="addCategoryBtn" class="secondary-btn" type="button">新增</button>
+            </div>
           </div>
           <button id="saveSettingsBtn" class="primary-btn full" type="submit">儲存旅程設定</button>
         </form>
@@ -543,6 +600,8 @@
       fundMode: "perPerson",
       selectedShareMembers: new Set(),
       selectedSettingCurrencies: new Set(),
+      settingsDraftMembers: [],
+      settingsDraftCategories: [],
       unsubscribers: [],
       activePage: "home"
     };
@@ -778,7 +837,9 @@
       if (!state.trip) return;
       state.trip.members = Array.isArray(state.trip.members) && state.trip.members.length ? state.trip.members : ["A", "B"];
       state.trip.enabledCurrencies = Array.isArray(state.trip.enabledCurrencies) && state.trip.enabledCurrencies.length ? state.trip.enabledCurrencies : ["TWD"];
-      state.trip.categories = Array.isArray(state.trip.categories) && state.trip.categories.length ? state.trip.categories : ["其他"];
+      state.trip.categories = Array.isArray(state.trip.categories) && state.trip.categories.length
+        ? state.trip.categories
+        : clone(APP_CONFIG.defaultTrip.categories || ["其他"]);
       if (!state.trip.enabledCurrencies.includes(state.trip.primaryCurrency)) state.trip.primaryCurrency = state.trip.enabledCurrencies[0];
     }
 
@@ -1303,31 +1364,134 @@
       $("tripName").value = state.trip.name || "";
       $("tripStartDate").value = state.trip.startDate || "";
       $("tripEndDate").value = state.trip.endDate || "";
-      $("tripMembers").value = state.trip.members.join("\n");
-      $("tripCategories").value = state.trip.categories.join("\n");
-      state.selectedSettingCurrencies = new Set(state.trip.enabledCurrencies);
+      state.settingsDraftMembers = [...state.trip.members];
+      state.settingsDraftCategories = [...state.trip.categories];
+      state.selectedSettingCurrencies = new Set(
+        state.trip.enabledCurrencies.filter((code) => APP_CONFIG.supportedCurrencies[code])
+      );
+      if (!state.selectedSettingCurrencies.size) {
+        state.selectedSettingCurrencies.add(APP_CONFIG.supportedCurrencies[state.trip.primaryCurrency] ? state.trip.primaryCurrency : "TWD");
+      }
+      renderMemberManageList();
+      renderCategoryManageList();
       renderCurrencySettingChips();
+    }
+
+    function renderMemberManageList() {
+      $("memberManageList").innerHTML = state.settingsDraftMembers.length
+        ? state.settingsDraftMembers.map((name, index) => `
+          <div class="manage-item">
+            <div class="manage-name">${escapeHtml(name)}</div>
+            <div class="manage-actions">
+              <button class="manage-btn" type="button" data-edit-member-index="${index}">修改</button>
+              <button class="manage-btn delete" type="button" data-delete-member-index="${index}">刪除</button>
+            </div>
+          </div>`).join("")
+        : `<div class="empty-manage">尚未新增成員</div>`;
+    }
+
+    function renderCategoryManageList() {
+      $("categoryManageList").innerHTML = state.settingsDraftCategories.length
+        ? state.settingsDraftCategories.map((name, index) => `
+          <div class="manage-item">
+            <div class="manage-name">${escapeHtml(name)}</div>
+            <div class="manage-actions">
+              <button class="manage-btn" type="button" data-edit-category-index="${index}">修改</button>
+              <button class="manage-btn delete" type="button" data-delete-category-index="${index}">刪除</button>
+            </div>
+          </div>`).join("")
+        : `<div class="empty-manage">尚未新增分類</div>`;
+    }
+
+    function hasExistingAccounting() {
+      return state.expenses.length > 0 || state.funds.length > 0;
+    }
+
+    function addDraftMember() {
+      if (hasExistingAccounting()) return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
+      const input = $("newMemberName");
+      const value = input.value.trim();
+      if (!value) return toast("請輸入成員名稱");
+      if (state.settingsDraftMembers.includes(value)) return toast("成員名稱不可重複");
+      state.settingsDraftMembers.push(value);
+      input.value = "";
+      renderMemberManageList();
+      input.focus();
+    }
+
+    function editDraftMember(index) {
+      if (hasExistingAccounting()) return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
+      const current = state.settingsDraftMembers[index];
+      if (current === undefined) return;
+      const value = prompt("修改成員名稱", current)?.trim();
+      if (!value || value === current) return;
+      if (state.settingsDraftMembers.some((name, i) => i !== index && name === value)) return toast("成員名稱不可重複");
+      state.settingsDraftMembers[index] = value;
+      renderMemberManageList();
+    }
+
+    function deleteDraftMember(index) {
+      if (hasExistingAccounting()) return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
+      const current = state.settingsDraftMembers[index];
+      if (current === undefined) return;
+      if (state.settingsDraftMembers.length <= 1) return toast("至少需要保留一位旅程成員");
+      if (!confirm(`確定刪除成員「${current}」？`)) return;
+      state.settingsDraftMembers.splice(index, 1);
+      renderMemberManageList();
+    }
+
+    function addDraftCategory() {
+      const input = $("newCategoryName");
+      const value = input.value.trim();
+      if (!value) return toast("請輸入分類名稱");
+      if (state.settingsDraftCategories.includes(value)) return toast("分類名稱不可重複");
+      state.settingsDraftCategories.push(value);
+      input.value = "";
+      renderCategoryManageList();
+      input.focus();
+    }
+
+    function editDraftCategory(index) {
+      const current = state.settingsDraftCategories[index];
+      if (current === undefined) return;
+      if (state.expenses.some((expense) => expense.category === current)) return toast("此分類已有帳務紀錄，無法直接修改名稱");
+      const value = prompt("修改分類名稱", current)?.trim();
+      if (!value || value === current) return;
+      if (state.settingsDraftCategories.some((name, i) => i !== index && name === value)) return toast("分類名稱不可重複");
+      state.settingsDraftCategories[index] = value;
+      renderCategoryManageList();
+    }
+
+    function deleteDraftCategory(index) {
+      const current = state.settingsDraftCategories[index];
+      if (current === undefined) return;
+      if (state.settingsDraftCategories.length <= 1) return toast("至少需要保留一個消費分類");
+      if (state.expenses.some((expense) => expense.category === current)) return toast("此分類已有帳務紀錄，無法刪除");
+      if (!confirm(`確定刪除分類「${current}」？`)) return;
+      state.settingsDraftCategories.splice(index, 1);
+      renderCategoryManageList();
     }
 
     function renderCurrencySettingChips() {
       $("currencySettingChips").innerHTML = Object.entries(APP_CONFIG.supportedCurrencies).map(([code, meta]) => `
         <button type="button" class="chip ${state.selectedSettingCurrencies.has(code) ? "active" : ""}" data-setting-currency="${code}">${code} ${escapeHtml(meta.name)}</button>
       `).join("");
-      const enabled = [...state.selectedSettingCurrencies];
+      const enabled = Object.keys(APP_CONFIG.supportedCurrencies).filter((code) => state.selectedSettingCurrencies.has(code));
       const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
-      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency].name}</option>`).join("");
+      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(APP_CONFIG.supportedCurrencies[currency].name)}</option>`).join("");
       $("primaryCurrency").value = enabled.includes(current) ? current : enabled[0] || "";
     }
 
     async function saveSettings(event) {
       event.preventDefault();
       if (!(await confirmServerBeforeWrite())) return;
-      const members = $("tripMembers").value.split(/\n|,/).map((v) => v.trim()).filter(Boolean);
-      const categories = $("tripCategories").value.split(/\n/).map((v) => v.trim()).filter(Boolean);
-      const enabledCurrencies = [...state.selectedSettingCurrencies];
+      const members = [...state.settingsDraftMembers];
+      const categories = [...state.settingsDraftCategories];
+      const enabledCurrencies = Object.keys(APP_CONFIG.supportedCurrencies).filter((code) => state.selectedSettingCurrencies.has(code));
       if (!members.length) return toast("至少需要一位旅程成員");
       if (!enabledCurrencies.length) return toast("至少需要啟用一種幣別");
       if (!categories.length) return toast("至少需要一個消費分類");
+      if (!enabledCurrencies.includes($("primaryCurrency").value)) return toast("請選擇主要旅行幣別");
       if ((state.expenses.length || state.funds.length) && JSON.stringify(members) !== JSON.stringify(state.trip.members)) {
         return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
       }
@@ -1475,6 +1639,15 @@
         return;
       }
 
+      const editMemberIndex = event.target.closest("[data-edit-member-index]")?.dataset.editMemberIndex;
+      if (editMemberIndex !== undefined) return editDraftMember(Number(editMemberIndex));
+      const deleteMemberIndex = event.target.closest("[data-delete-member-index]")?.dataset.deleteMemberIndex;
+      if (deleteMemberIndex !== undefined) return deleteDraftMember(Number(deleteMemberIndex));
+      const editCategoryIndex = event.target.closest("[data-edit-category-index]")?.dataset.editCategoryIndex;
+      if (editCategoryIndex !== undefined) return editDraftCategory(Number(editCategoryIndex));
+      const deleteCategoryIndex = event.target.closest("[data-delete-category-index]")?.dataset.deleteCategoryIndex;
+      if (deleteCategoryIndex !== undefined) return deleteDraftCategory(Number(deleteCategoryIndex));
+
       const editExpenseId = event.target.closest("[data-edit-expense]")?.dataset.editExpense;
       if (editExpenseId) return editExpense(editExpenseId);
       const deleteExpenseId = event.target.closest("[data-delete-expense]")?.dataset.deleteExpense;
@@ -1505,6 +1678,14 @@
     });
     $("calculateSettlementBtn").addEventListener("click", saveSettlement);
     $("settingsForm").addEventListener("submit", saveSettings);
+    $("addMemberBtn").addEventListener("click", addDraftMember);
+    $("addCategoryBtn").addEventListener("click", addDraftCategory);
+    $("newMemberName").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); addDraftMember(); }
+    });
+    $("newCategoryName").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); addDraftCategory(); }
+    });
     $("clearTripBtn").addEventListener("click", clearTripData);
     $("exportBtn").addEventListener("click", exportWorkbook);
     $("networkPill").addEventListener("click", async () => {
