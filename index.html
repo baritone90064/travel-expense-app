@@ -1,0 +1,1562 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#f8f4e8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="旅途記帳" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="apple-touch-icon" href="app-icon.png" />
+  <link rel="icon" href="app-icon.png" />
+  <title>旅途記帳</title>
+
+  <style>
+    :root {
+      --bg: #f7f3e8;
+      --surface: #ffffff;
+      --surface-warm: #fffaf0;
+      --text: #1e2823;
+      --muted: #778078;
+      --line: #e7e2d6;
+      --primary: #6f7f3a;
+      --primary-dark: #53612a;
+      --primary-soft: #edf0dc;
+      --gold: #b8873c;
+      --blue: #4b8cab;
+      --danger: #d8463d;
+      --warning: #a46b18;
+      --shadow: 0 12px 34px rgba(70, 68, 55, 0.10);
+      --radius: 20px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior-y: none;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+    .hidden { display: none !important; }
+
+    #appShell {
+      width: min(100%, 560px);
+      margin: 0 auto;
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 95% 2%, rgba(184, 135, 60, .13), transparent 22%),
+        radial-gradient(circle at 5% 12%, rgba(75, 140, 171, .10), transparent 25%),
+        var(--bg);
+      position: relative;
+      padding-bottom: calc(92px + var(--safe-bottom));
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding: calc(10px + var(--safe-top)) 16px 12px;
+      background: rgba(247, 243, 232, .90);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(231, 226, 214, .72);
+    }
+    .topbar-row { display: flex; align-items: center; gap: 12px; }
+    .app-mark {
+      width: 46px; height: 46px; border-radius: 14px; object-fit: cover;
+      box-shadow: 0 5px 15px rgba(58, 64, 42, .18);
+      flex: 0 0 auto;
+    }
+    .title-wrap { min-width: 0; flex: 1; }
+    .title-wrap h1 { font-size: 19px; margin: 0; letter-spacing: .2px; }
+    .title-wrap p { margin: 3px 0 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status-pill {
+      min-width: 44px; min-height: 32px; padding: 6px 9px; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+      font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .status-pill.online { color: var(--primary-dark); border-color: #ccd4a4; background: #f5f8e8; }
+    .status-pill.offline { color: #8f5b12; border-color: #e7c78f; background: #fff5df; }
+
+    main { padding: 14px 14px 28px; }
+    .page { display: none; animation: pageIn .18s ease-out; }
+    .page.active { display: block; }
+    @keyframes pageIn { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .offline-banner {
+      margin-bottom: 12px; padding: 11px 13px; border-radius: 14px;
+      background: #fff3db; border: 1px solid #e7c78f; color: #81520f;
+      font-size: 13px; line-height: 1.5;
+    }
+
+    .hero {
+      background: linear-gradient(145deg, #fffdf7, #f5eedc);
+      border: 1px solid #e9dfc6;
+      box-shadow: var(--shadow);
+      border-radius: 26px;
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .hero::after {
+      content: "✈︎";
+      position: absolute; right: 14px; top: 8px; font-size: 68px; color: rgba(75, 140, 171, .12);
+      transform: rotate(-8deg);
+    }
+    .eyebrow { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    .hero h2 { margin: 5px 0 7px; font-size: 25px; line-height: 1.2; max-width: 78%; }
+    .hero-meta { font-size: 13px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 15px; box-shadow: 0 7px 20px rgba(70, 68, 55, .055); margin-bottom: 12px;
+    }
+    .card.soft { background: var(--surface-warm); }
+    .card h3 { margin: 0 0 11px; font-size: 16px; }
+    .metric-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    .metric-value { font-size: 23px; font-weight: 800; letter-spacing: -.4px; }
+    .metric-note { margin-top: 5px; font-size: 11px; color: var(--muted); }
+
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 2px 10px; }
+    .section-head h2 { font-size: 20px; margin: 0; }
+    .section-head p { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+
+    .primary-btn, .secondary-btn, .danger-btn, .ghost-btn, .icon-btn {
+      min-height: 46px; border: 0; border-radius: 14px; padding: 11px 15px; font-weight: 800; cursor: pointer;
+    }
+    .primary-btn { color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); box-shadow: 0 8px 18px rgba(83, 97, 42, .20); }
+    .secondary-btn { color: var(--primary-dark); background: var(--primary-soft); border: 1px solid #dce3bb; }
+    .danger-btn { color: #fff; background: var(--danger); }
+    .ghost-btn { color: var(--text); background: #fff; border: 1px solid var(--line); }
+    .icon-btn { min-width: 44px; padding: 9px 11px; color: var(--text); background: #fff; border: 1px solid var(--line); }
+    button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .full { width: 100%; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    label { display: block; font-size: 13px; font-weight: 750; margin-bottom: 7px; }
+    .field { margin-bottom: 14px; }
+    input, select, textarea {
+      width: 100%; min-height: 48px; border: 1px solid #dcd8ce; border-radius: 14px;
+      background: #fff; color: var(--text); padding: 11px 12px; outline: none;
+      font-size: 16px;
+    }
+    textarea { min-height: 84px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: #9eaa68; box-shadow: 0 0 0 3px rgba(111, 127, 58, .12); }
+    .amount-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 9px; }
+    .amount-input { font-size: 25px; font-weight: 800; }
+    .hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+
+    .segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    .segment {
+      min-height: 42px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+      color: var(--text); font-size: 13px; font-weight: 750; padding: 8px 5px;
+    }
+    .segment.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      min-height: 40px; min-width: 40px; border: 1px solid #d8d3c7; background: #fff; color: var(--text);
+      border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 750;
+    }
+    .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .list { display: grid; gap: 9px; }
+    .record {
+      background: #fff; border: 1px solid var(--line); border-radius: 17px; padding: 13px;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center;
+    }
+    .record-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+    .record-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .record-amount { font-size: 17px; font-weight: 900; text-align: right; }
+    .record-actions { margin-top: 7px; display: flex; gap: 6px; justify-content: flex-end; }
+    .mini-btn { border: 0; border-radius: 10px; min-height: 34px; padding: 6px 10px; font-size: 12px; font-weight: 750; background: #f3f1eb; color: var(--text); }
+    .mini-btn.danger { color: var(--danger); background: #fff0ee; }
+
+    .filter-summary { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+    .filter-summary::-webkit-scrollbar { display: none; }
+    .filter-tag { white-space: nowrap; background: var(--primary-soft); color: var(--primary-dark); border: 1px solid #dce3bb; border-radius: 999px; font-size: 12px; padding: 6px 9px; }
+
+    .currency-table { display: grid; gap: 8px; }
+    .currency-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+    .currency-row:last-child { border-bottom: 0; }
+    .currency-code { font-size: 12px; color: var(--muted); }
+    .currency-name { font-weight: 750; }
+    .currency-value { text-align: right; font-weight: 850; }
+
+    .settlement-item { padding: 11px 0; border-bottom: 1px dashed var(--line); }
+    .settlement-item:last-child { border-bottom: 0; }
+    .settlement-title { font-size: 14px; font-weight: 850; }
+    .settlement-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .more-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .more-tile {
+      border: 1px solid var(--line); background: #fff; min-height: 110px; border-radius: 20px; padding: 15px;
+      text-align: left; color: var(--text);
+    }
+    .more-icon { font-size: 25px; }
+    .more-title { margin-top: 10px; font-weight: 850; }
+    .more-note { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 30;
+      width: min(100%, 560px); padding: 8px 8px calc(8px + var(--safe-bottom));
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px;
+      background: rgba(255, 255, 255, .94); border-top: 1px solid rgba(220, 216, 206, .86);
+      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    }
+    .nav-btn {
+      border: 0; background: transparent; min-height: 55px; border-radius: 15px;
+      color: #777d77; display: grid; place-items: center; align-content: center; gap: 3px;
+      font-size: 10px; font-weight: 750;
+    }
+    .nav-icon { font-size: 21px; line-height: 1; }
+    .nav-btn.active { color: var(--primary-dark); background: var(--primary-soft); }
+    .nav-btn.add-nav { transform: translateY(-8px); background: var(--primary); color: #fff; border-radius: 18px; box-shadow: 0 8px 18px rgba(83, 97, 42, .24); }
+    .nav-btn.add-nav.active { background: var(--primary-dark); }
+
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 80; background: rgba(26, 30, 27, .38);
+      display: flex; align-items: flex-end; justify-content: center;
+    }
+    .sheet {
+      width: min(100%, 560px); max-height: 91dvh; overflow-y: auto;
+      background: var(--bg); border-radius: 28px 28px 0 0; padding: 10px 14px calc(18px + var(--safe-bottom));
+      box-shadow: 0 -18px 45px rgba(0,0,0,.18);
+    }
+    .sheet-handle { width: 38px; height: 5px; border-radius: 99px; background: #c8c4ba; margin: 2px auto 12px; }
+    .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .sheet-head h2 { margin: 0; font-size: 20px; }
+
+    .toast {
+      position: fixed; z-index: 100; left: 50%; bottom: calc(98px + var(--safe-bottom)); transform: translateX(-50%) translateY(18px);
+      width: min(calc(100% - 28px), 500px); background: #253027; color: #fff; border-radius: 14px;
+      padding: 12px 14px; font-size: 13px; opacity: 0; pointer-events: none; transition: .2s ease;
+      box-shadow: 0 12px 30px rgba(0,0,0,.2);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .login-screen {
+      min-height: 100dvh; padding: calc(30px + var(--safe-top)) 24px calc(30px + var(--safe-bottom));
+      display: grid; align-content: center; justify-items: center; text-align: center;
+      background:
+        radial-gradient(circle at 50% 14%, rgba(75, 140, 171, .14), transparent 28%),
+        radial-gradient(circle at 50% 92%, rgba(184, 135, 60, .18), transparent 32%),
+        var(--bg);
+    }
+    .login-icon { width: 150px; height: 150px; object-fit: cover; border-radius: 34px; box-shadow: var(--shadow); }
+    .login-screen h1 { margin: 22px 0 7px; font-size: 30px; }
+    .login-screen p { color: var(--muted); max-width: 340px; line-height: 1.65; margin: 0 0 22px; }
+    .google-btn { width: min(100%, 360px); min-height: 52px; border-radius: 16px; border: 1px solid var(--line); background: #fff; font-weight: 850; color: var(--text); }
+    .login-error { margin-top: 14px; color: var(--danger); font-size: 13px; max-width: 360px; }
+
+    .empty { text-align: center; color: var(--muted); padding: 32px 16px; font-size: 13px; line-height: 1.7; }
+    .danger-zone { border-color: #efc5c1; background: #fff8f7; }
+    .user-line { font-size: 12px; color: var(--muted); word-break: break-all; }
+
+    @media (min-width: 720px) {
+      #appShell { margin-top: 14px; margin-bottom: 14px; min-height: calc(100dvh - 28px); border-radius: 30px; overflow: hidden; box-shadow: 0 20px 60px rgba(40, 44, 39, .15); }
+      .bottom-nav { bottom: 14px; border-radius: 0 0 30px 30px; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginScreen" class="login-screen">
+    <img class="login-icon" src="app-icon.png" alt="旅途記帳 App Icon" />
+    <h1 id="loginTitle">旅途記帳</h1>
+    <p>使用已授權的 Google 帳號登入，兩位使用者會共用同一份旅行帳務資料。</p>
+    <button id="googleLoginBtn" class="google-btn">使用 Google 帳號登入</button>
+    <div id="loginError" class="login-error hidden"></div>
+  </section>
+
+  <div id="appShell" class="hidden">
+    <header class="topbar">
+      <div class="topbar-row">
+        <img class="app-mark" src="app-icon.png" alt="App Icon" />
+        <div class="title-wrap">
+          <h1 id="appTitle">旅途記帳</h1>
+          <p id="tripHeader">正在讀取旅程…</p>
+        </div>
+        <button id="networkPill" class="status-pill" type="button">讀取中</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="offlineBanner" class="offline-banner hidden">
+        目前為離線瀏覽模式。你可以查看已快取的資料，但新增、修改、刪除、清空資料及重新結算均已停用。
+      </div>
+
+      <section id="page-home" class="page active">
+        <div id="homeHero" class="hero">
+          <div class="eyebrow">Current trip</div>
+          <h2 id="homeTripName">新的旅程</h2>
+          <div id="homeTripMeta" class="hero-meta"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="metric-label">參考台幣總花費</div>
+            <div id="referenceTwd" class="metric-value">NT$0</div>
+            <div id="rateUpdatedAt" class="metric-note">匯率尚未更新</div>
+          </div>
+          <div class="card soft">
+            <div class="metric-label">記帳筆數</div>
+            <div id="expenseCount" class="metric-value">0</div>
+            <div class="metric-note">共同消費與個人消費</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head"><div><h2>各幣別概況</h2><p>公基金餘額與總消費分開顯示</p></div></div>
+          <div id="currencyOverview" class="currency-table"></div>
+        </div>
+
+        <div class="button-row">
+          <button class="primary-btn" data-nav="add">＋ 快速記帳</button>
+          <button class="secondary-btn" data-nav="fund">公基金儲值</button>
+        </div>
+      </section>
+
+      <section id="page-records" class="page">
+        <div class="section-head">
+          <div><h2>帳務紀錄</h2><p>依日期、分類、幣別、支付者與分攤成員篩選</p></div>
+          <button id="openFilterBtn" class="icon-btn">篩選</button>
+        </div>
+        <div id="filterSummary" class="filter-summary"></div>
+        <div style="height:9px"></div>
+        <div id="expenseList" class="list"></div>
+      </section>
+
+      <section id="page-add" class="page">
+        <div class="section-head"><div><h2 id="expenseFormTitle">快速記帳</h2><p>幣別、支付者與分攤成員會沿用上一筆</p></div></div>
+        <form id="expenseForm" class="card">
+          <input id="expenseId" type="hidden" />
+          <div class="field">
+            <label for="expenseAmount">金額</label>
+            <div class="amount-row">
+              <input id="expenseAmount" class="amount-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" required />
+              <select id="expenseCurrency" required></select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="expensePayer">支付者</label>
+            <select id="expensePayer" required></select>
+          </div>
+
+          <div class="field">
+            <label for="expenseCategory">消費分類</label>
+            <select id="expenseCategory" required></select>
+          </div>
+
+          <div class="field">
+            <label>分攤成員</label>
+            <div id="shareMemberChips" class="chips"></div>
+            <div id="shareModeHint" class="hint"></div>
+          </div>
+
+          <div class="field">
+            <label for="expenseDate">日期</label>
+            <input id="expenseDate" type="date" required />
+          </div>
+
+          <div class="field">
+            <label for="expenseNote">備註</label>
+            <textarea id="expenseNote" placeholder="可輸入店家、地點或其他說明"></textarea>
+          </div>
+
+          <div class="button-row">
+            <button id="cancelExpenseEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
+            <button id="saveExpenseBtn" class="primary-btn" type="submit">儲存記帳</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="page-settlement" class="page">
+        <div class="section-head"><div><h2>旅程結算</h2><p>每種幣別獨立計算，不用匯率互相抵銷</p></div></div>
+        <div class="card soft">
+          <div class="hint" style="margin:0 0 10px">結算會先使用該幣別的公基金餘額返還應收者，再安排成員間付款。</div>
+          <button id="calculateSettlementBtn" class="primary-btn full">重新計算結算</button>
+        </div>
+        <div id="settlementContent"></div>
+      </section>
+
+      <section id="page-more" class="page">
+        <div class="section-head"><div><h2>更多功能</h2><p>公基金、統計、設定與匯出</p></div></div>
+        <div class="more-menu">
+          <button class="more-tile" data-nav="fund"><div class="more-icon">🪙</div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
+          <button class="more-tile" data-nav="stats"><div class="more-icon">📊</div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
+          <button class="more-tile" data-nav="settings"><div class="more-icon">⚙️</div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
+          <button id="exportBtn" class="more-tile"><div class="more-icon">📤</div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <h3>登入帳號</h3>
+          <div id="currentUserLine" class="user-line"></div>
+          <button id="logoutBtn" class="ghost-btn full" style="margin-top:12px">登出</button>
+        </div>
+      </section>
+
+      <section id="page-fund" class="page">
+        <div class="section-head"><div><h2>公基金</h2><p>每次儲值視為所有旅程成員共同繳交</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <form id="fundForm" class="card">
+          <input id="fundId" type="hidden" />
+          <div class="field">
+            <label for="fundDate">日期</label>
+            <input id="fundDate" type="date" required />
+          </div>
+          <div class="field">
+            <label for="fundCurrency">幣別</label>
+            <select id="fundCurrency" required></select>
+          </div>
+          <div class="field">
+            <label>輸入方式</label>
+            <div class="segmented">
+              <button id="fundModePerPerson" class="segment active" type="button">每人金額</button>
+              <button id="fundModeTotal" class="segment" type="button">總金額</button>
+              <button class="segment" type="button" disabled>全員繳交</button>
+            </div>
+          </div>
+          <div class="field">
+            <label id="fundAmountLabel" for="fundAmount">每人儲值金額</label>
+            <input id="fundAmount" type="number" inputmode="decimal" min="0" step="0.01" required />
+            <div id="fundPreview" class="hint"></div>
+          </div>
+          <div class="field">
+            <label for="fundNote">備註</label>
+            <input id="fundNote" type="text" placeholder="選填" />
+          </div>
+          <div class="button-row">
+            <button id="cancelFundEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
+            <button id="saveFundBtn" class="primary-btn" type="submit">儲存公基金</button>
+          </div>
+        </form>
+        <div id="fundList" class="list"></div>
+      </section>
+
+      <section id="page-stats" class="page">
+        <div class="section-head"><div><h2>統計分析</h2><p>不同幣別保留原幣，同時提供參考台幣</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <div id="statsContent"></div>
+      </section>
+
+      <section id="page-settings" class="page">
+        <div class="section-head"><div><h2>旅程設定</h2><p>兩位 App 使用者可共同管理同一趟旅行</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <form id="settingsForm" class="card">
+          <div class="field"><label for="tripName">旅程名稱</label><input id="tripName" type="text" required /></div>
+          <div class="grid-2">
+            <div class="field"><label for="tripStartDate">開始日期</label><input id="tripStartDate" type="date" /></div>
+            <div class="field"><label for="tripEndDate">結束日期</label><input id="tripEndDate" type="date" /></div>
+          </div>
+          <div class="field">
+            <label for="tripMembers">參加成員</label>
+            <textarea id="tripMembers" placeholder="每行一位，例如：&#10;Terry&#10;旅伴"></textarea>
+            <div class="hint">成員名稱會用於支付者、分攤與結算。至少需要一位。</div>
+          </div>
+          <div class="field">
+            <label>啟用幣別</label>
+            <div id="currencySettingChips" class="chips"></div>
+          </div>
+          <div class="field"><label for="primaryCurrency">主要旅行幣別</label><select id="primaryCurrency"></select></div>
+          <div class="field">
+            <label for="tripCategories">消費分類</label>
+            <textarea id="tripCategories" placeholder="每行一個分類"></textarea>
+          </div>
+          <button id="saveSettingsBtn" class="primary-btn full" type="submit">儲存旅程設定</button>
+        </form>
+
+        <div class="card danger-zone">
+          <h3>清空資料</h3>
+          <p class="hint">會永久刪除目前旅程的消費、公基金與結算資料，並建立空白旅程。依你的需求，不保留刪除或修改紀錄。</p>
+          <button id="clearTripBtn" class="danger-btn full">清空目前旅程資料</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主要導覽">
+      <button class="nav-btn active" data-nav="home"><span class="nav-icon">⌂</span><span>首頁</span></button>
+      <button class="nav-btn" data-nav="records"><span class="nav-icon">▤</span><span>紀錄</span></button>
+      <button class="nav-btn add-nav" data-nav="add"><span class="nav-icon">＋</span><span>記帳</span></button>
+      <button class="nav-btn" data-nav="settlement"><span class="nav-icon">⇄</span><span>結算</span></button>
+      <button class="nav-btn" data-nav="more"><span class="nav-icon">•••</span><span>更多</span></button>
+    </nav>
+  </div>
+
+  <div id="filterModal" class="modal-backdrop hidden">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2>篩選帳務</h2><button id="closeFilterBtn" class="icon-btn">完成</button></div>
+      <div class="card">
+        <div class="grid-2">
+          <div class="field"><label for="filterStartDate">開始日期</label><input id="filterStartDate" type="date" /></div>
+          <div class="field"><label for="filterEndDate">結束日期</label><input id="filterEndDate" type="date" /></div>
+        </div>
+        <div class="field"><label for="filterCategory">分類</label><select id="filterCategory"></select></div>
+        <div class="field"><label for="filterCurrency">幣別</label><select id="filterCurrency"></select></div>
+        <div class="field"><label for="filterPayer">支付者</label><select id="filterPayer"></select></div>
+        <div class="field"><label for="filterShareMember">分攤成員</label><select id="filterShareMember"></select></div>
+        <div class="button-row">
+          <button id="clearFilterBtn" class="ghost-btn" type="button">清除</button>
+          <button id="applyFilterBtn" class="primary-btn" type="button">套用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    import { APP_CONFIG } from "./firebase-config.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+      getRedirectResult, onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+    import {
+      initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager,
+      collection, doc, getDoc, getDocFromCache, getDocs, getDocsFromServer,
+      setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit,
+      writeBatch
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+    import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+
+    const state = {
+      user: null,
+      authorized: false,
+      online: navigator.onLine,
+      serverReachable: navigator.onLine,
+      currentTripId: null,
+      trip: null,
+      settings: null,
+      expenses: [],
+      funds: [],
+      settlement: null,
+      filters: {},
+      fundMode: "perPerson",
+      selectedShareMembers: new Set(),
+      selectedSettingCurrencies: new Set(),
+      unsubscribers: [],
+      activePage: "home"
+    };
+
+    const app = initializeApp(APP_CONFIG.firebaseConfig);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+
+    let db;
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      });
+    } catch (error) {
+      console.warn("Persistent Firestore cache initialization fallback:", error);
+      db = getFirestore(app);
+    }
+
+    document.title = APP_CONFIG.appName;
+    $("appTitle").textContent = APP_CONFIG.appName;
+    $("loginTitle").textContent = APP_CONFIG.appName;
+
+    function toast(message) {
+      const el = $("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => el.classList.remove("show"), 2800);
+    }
+
+    function formatMoney(amount, currency) {
+      const meta = APP_CONFIG.supportedCurrencies[currency] || { symbol: currency, decimals: 2 };
+      const value = Number(amount || 0);
+      return `${meta.symbol}${value.toLocaleString("zh-TW", {
+        minimumFractionDigits: meta.decimals,
+        maximumFractionDigits: meta.decimals
+      })}`;
+    }
+
+    function safeNumber(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function escapeHtml(value = "") {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function timestampToText(value) {
+      if (!value) return "";
+      const date = value?.toDate ? value.toDate() : new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleString("zh-TW", { hour12: false });
+    }
+
+    function updateNetworkUi() {
+      const offline = !state.online || !state.serverReachable;
+      const pill = $("networkPill");
+      pill.className = `status-pill ${offline ? "offline" : "online"}`;
+      pill.textContent = offline ? "離線唯讀" : "已連線";
+      $("offlineBanner").classList.toggle("hidden", !offline);
+
+      document.querySelectorAll("#expenseForm input, #expenseForm select, #expenseForm textarea, #expenseForm button, #fundForm input, #fundForm select, #fundForm textarea, #fundForm button, #settingsForm input, #settingsForm select, #settingsForm textarea, #settingsForm button, #clearTripBtn, #calculateSettlementBtn, .record-actions button").forEach((el) => {
+        el.disabled = offline;
+      });
+      // 離線仍可使用篩選、切換頁面、匯出與登出。
+      ["openFilterBtn", "exportBtn", "logoutBtn"].forEach((id) => {
+        if ($(id)) $(id).disabled = false;
+      });
+    }
+
+    async function confirmServerBeforeWrite() {
+      if (!navigator.onLine) {
+        state.online = false;
+        state.serverReachable = false;
+        updateNetworkUi();
+        toast("目前離線，只能瀏覽資料");
+        return false;
+      }
+      try {
+        await getDocsFromServer(query(collection(db, "trips"), limit(1)));
+        state.online = true;
+        state.serverReachable = true;
+        updateNetworkUi();
+        return true;
+      } catch (error) {
+        console.warn("Server connection check failed:", error);
+        state.serverReachable = false;
+        updateNetworkUi();
+        toast("目前無法連線 Firebase，已切換成唯讀模式");
+        return false;
+      }
+    }
+
+    function getLastEntryKey() {
+      return `travel-ledger:last-entry:${state.currentTripId || "none"}`;
+    }
+
+    function saveLastEntry(expense) {
+      localStorage.setItem(getLastEntryKey(), JSON.stringify({
+        currency: expense.currency,
+        payer: expense.payer,
+        shareMemberIds: expense.shareMemberIds
+      }));
+    }
+
+    function loadLastEntry() {
+      try { return JSON.parse(localStorage.getItem(getLastEntryKey()) || "null"); }
+      catch { return null; }
+    }
+
+    function clearLastEntry() {
+      localStorage.removeItem(getLastEntryKey());
+    }
+
+    async function login() {
+      $("loginError").classList.add("hidden");
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (error) {
+        if (["auth/popup-blocked", "auth/cancelled-popup-request", "auth/web-storage-unsupported"].includes(error.code)) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        console.error(error);
+        $("loginError").textContent = "登入失敗，請確認 Firebase 已啟用 Google 登入，且 GitHub Pages 網域已加入授權網域。";
+        $("loginError").classList.remove("hidden");
+      }
+    }
+
+    async function verifyAuthorization(user) {
+      try {
+        const ref = doc(db, "authorizedUsers", user.uid);
+        let snap;
+        try { snap = await getDoc(ref); }
+        catch { snap = await getDocFromCache(ref); }
+        return snap.exists() && snap.data().active !== false;
+      } catch (error) {
+        console.error("Authorization check failed:", error);
+        return false;
+      }
+    }
+
+    async function ensureInitialData() {
+      const settingsRef = doc(db, "appSettings", "main");
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists() && settingsSnap.data().currentTripId) return settingsSnap.data();
+
+      if (!(await confirmServerBeforeWrite())) throw new Error("首次使用需要網路連線");
+      const tripRef = doc(collection(db, "trips"));
+      const trip = {
+        ...clone(APP_CONFIG.defaultTrip),
+        startDate: today(),
+        endDate: ""
+      };
+      await setDoc(tripRef, trip);
+      const settings = {
+        currentTripId: tripRef.id,
+        exchangeRates: { TWD: 1 },
+        exchangeRateDate: "",
+        exchangeRateUpdatedAt: ""
+      };
+      await setDoc(settingsRef, settings);
+      return settings;
+    }
+
+    function clearSubscriptions() {
+      state.unsubscribers.forEach((unsub) => { try { unsub(); } catch {} });
+      state.unsubscribers = [];
+    }
+
+    async function subscribeData() {
+      clearSubscriptions();
+      const settingsRef = doc(db, "appSettings", "main");
+      const settingsUnsub = onSnapshot(settingsRef, { includeMetadataChanges: true }, async (snap) => {
+        if (!snap.exists()) return;
+        state.settings = { id: snap.id, ...snap.data() };
+        state.serverReachable = !snap.metadata.fromCache;
+        if (state.currentTripId !== state.settings.currentTripId) {
+          state.currentTripId = state.settings.currentTripId;
+          subscribeTripCollections();
+        }
+        renderAll();
+        updateNetworkUi();
+        if (navigator.onLine) updateExchangeRatesOnceDaily();
+      });
+      state.unsubscribers.push(settingsUnsub);
+    }
+
+    function subscribeTripCollections() {
+      state.unsubscribers.slice(1).forEach((unsub) => { try { unsub(); } catch {} });
+      state.unsubscribers = state.unsubscribers.slice(0, 1);
+      if (!state.currentTripId) return;
+
+      const tripRef = doc(db, "trips", state.currentTripId);
+      const tripUnsub = onSnapshot(tripRef, { includeMetadataChanges: true }, (snap) => {
+        if (!snap.exists()) return;
+        state.trip = { id: snap.id, ...snap.data() };
+        if (snap.metadata.fromCache && !navigator.onLine) state.serverReachable = false;
+        normalizeTripState();
+        renderAll();
+        updateNetworkUi();
+      });
+
+      const expensesQuery = query(collection(db, "trips", state.currentTripId, "expenses"), orderBy("date", "desc"));
+      const expensesUnsub = onSnapshot(expensesQuery, { includeMetadataChanges: true }, (snap) => {
+        state.expenses = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+        renderAll();
+      }, (error) => console.error("Expenses subscription:", error));
+
+      const fundsQuery = query(collection(db, "trips", state.currentTripId, "funds"), orderBy("date", "desc"));
+      const fundsUnsub = onSnapshot(fundsQuery, { includeMetadataChanges: true }, (snap) => {
+        state.funds = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+        renderAll();
+      }, (error) => console.error("Funds subscription:", error));
+
+      const settlementRef = doc(db, "trips", state.currentTripId, "settlements", "latest");
+      const settlementUnsub = onSnapshot(settlementRef, { includeMetadataChanges: true }, (snap) => {
+        state.settlement = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+        renderSettlement();
+      });
+
+      state.unsubscribers.push(tripUnsub, expensesUnsub, fundsUnsub, settlementUnsub);
+    }
+
+    function normalizeTripState() {
+      if (!state.trip) return;
+      state.trip.members = Array.isArray(state.trip.members) && state.trip.members.length ? state.trip.members : ["A", "B"];
+      state.trip.enabledCurrencies = Array.isArray(state.trip.enabledCurrencies) && state.trip.enabledCurrencies.length ? state.trip.enabledCurrencies : ["TWD"];
+      state.trip.categories = Array.isArray(state.trip.categories) && state.trip.categories.length ? state.trip.categories : ["其他"];
+      if (!state.trip.enabledCurrencies.includes(state.trip.primaryCurrency)) state.trip.primaryCurrency = state.trip.enabledCurrencies[0];
+    }
+
+    async function updateExchangeRatesOnceDaily() {
+      if (!state.settings || !navigator.onLine) return;
+      const dateKey = today();
+      if (state.settings.exchangeRateDate === dateKey) return;
+      try {
+        const response = await fetch(APP_CONFIG.exchangeRateApiUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const sourceRates = data.rates || data.conversion_rates;
+        if (!sourceRates) throw new Error("匯率格式不符");
+        const rates = { TWD: 1 };
+        Object.keys(APP_CONFIG.supportedCurrencies).forEach((currency) => {
+          if (currency === "TWD") return;
+          const value = safeNumber(sourceRates[currency]);
+          if (value > 0) rates[currency] = value;
+        });
+        await updateDoc(doc(db, "appSettings", "main"), {
+          exchangeRates: rates,
+          exchangeRateDate: dateKey,
+          exchangeRateUpdatedAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.warn("Exchange rate update failed; using previous rates:", error);
+      }
+    }
+
+    function convertToTwd(amount, currency) {
+      if (currency === "TWD") return safeNumber(amount);
+      const rate = safeNumber(state.settings?.exchangeRates?.[currency]);
+      if (!rate) return 0;
+      return safeNumber(amount) / rate;
+    }
+
+    function navigate(page) {
+      state.activePage = page;
+      document.querySelectorAll(".page").forEach((el) => el.classList.toggle("active", el.id === `page-${page}`));
+      document.querySelectorAll(".nav-btn").forEach((el) => el.classList.toggle("active", el.dataset.nav === page));
+      window.scrollTo({ top: 0, behavior: "instant" });
+      if (page === "add") prepareExpenseForm();
+      if (page === "settings") renderSettingsForm();
+      if (page === "stats") renderStats();
+      if (page === "settlement") renderSettlement();
+      if (page === "fund") prepareFundForm(false);
+    }
+
+    function renderAll() {
+      if (!state.trip) return;
+      renderHeader();
+      renderHome();
+      renderExpenseOptions();
+      renderExpenseList();
+      renderFundOptions();
+      renderFundList();
+      renderFilterOptions();
+      renderStats();
+      renderSettlement();
+      renderSettingsForm();
+    }
+
+    function renderHeader() {
+      $("tripHeader").textContent = state.trip?.name || "新的旅程";
+      $("currentUserLine").textContent = state.user ? `${state.user.displayName || "Google 使用者"}｜${state.user.email || ""}` : "";
+    }
+
+    function getCurrencyTotals() {
+      const result = {};
+      (state.trip?.enabledCurrencies || []).forEach((currency) => {
+        result[currency] = { expense: 0, fundIn: 0, fundSpent: 0, fundBalance: 0, personalPaid: 0 };
+      });
+      state.expenses.forEach((expense) => {
+        const currency = expense.currency;
+        result[currency] ||= { expense: 0, fundIn: 0, fundSpent: 0, fundBalance: 0, personalPaid: 0 };
+        result[currency].expense += safeNumber(expense.amount);
+        if (expense.payer === "FUND") result[currency].fundSpent += safeNumber(expense.amount);
+        else result[currency].personalPaid += safeNumber(expense.amount);
+      });
+      state.funds.forEach((fund) => {
+        const currency = fund.currency;
+        result[currency] ||= { expense: 0, fundIn: 0, fundSpent: 0, fundBalance: 0, personalPaid: 0 };
+        result[currency].fundIn += safeNumber(fund.totalAmount);
+      });
+      Object.values(result).forEach((row) => row.fundBalance = row.fundIn - row.fundSpent);
+      return result;
+    }
+
+    function renderHome() {
+      const trip = state.trip;
+      $("homeTripName").textContent = trip.name;
+      const dateText = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
+      $("homeTripMeta").innerHTML = `<span>🗓 ${escapeHtml(dateText)}</span><span>👥 ${trip.members.length} 人</span><span>💱 ${trip.enabledCurrencies.join("・")}</span>`;
+      $("expenseCount").textContent = state.expenses.length.toLocaleString("zh-TW");
+
+      const twdTotal = state.expenses.reduce((sum, item) => sum + convertToTwd(item.amount, item.currency), 0);
+      $("referenceTwd").textContent = formatMoney(twdTotal, "TWD");
+      $("rateUpdatedAt").textContent = state.settings?.exchangeRateUpdatedAt
+        ? `匯率更新：${new Date(state.settings.exchangeRateUpdatedAt).toLocaleString("zh-TW", { hour12: false })}（僅供參考）`
+        : "尚無匯率資料；外幣不列入參考台幣總額";
+
+      const totals = getCurrencyTotals();
+      const rows = Object.entries(totals).map(([currency, value]) => `
+        <div class="currency-row">
+          <div><div class="currency-name">${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</div><div class="currency-code">${currency}｜消費 ${formatMoney(value.expense, currency)}</div></div>
+          <div class="currency-value">基金餘額<br>${formatMoney(value.fundBalance, currency)}</div>
+        </div>`).join("");
+      $("currencyOverview").innerHTML = rows || `<div class="empty">尚無幣別資料</div>`;
+    }
+
+    function renderExpenseOptions() {
+      const trip = state.trip;
+      if (!trip) return;
+      const currentCurrency = $("expenseCurrency").value;
+      $("expenseCurrency").innerHTML = trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</option>`).join("");
+      if (trip.enabledCurrencies.includes(currentCurrency)) $("expenseCurrency").value = currentCurrency;
+
+      const currentPayer = $("expensePayer").value;
+      $("expensePayer").innerHTML = `<option value="FUND">公基金</option>` + trip.members.map((member) => `<option value="${escapeHtml(member)}">${escapeHtml(member)}代墊</option>`).join("");
+      if (["FUND", ...trip.members].includes(currentPayer)) $("expensePayer").value = currentPayer;
+
+      const currentCategory = $("expenseCategory").value;
+      $("expenseCategory").innerHTML = trip.categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
+      if (trip.categories.includes(currentCategory)) $("expenseCategory").value = currentCategory;
+
+      renderShareMemberChips();
+    }
+
+    function prepareExpenseForm(forceReset = false) {
+      if (!state.trip) return;
+      if ($("expenseId").value && !forceReset) return;
+      $("expenseForm").reset();
+      $("expenseId").value = "";
+      $("expenseFormTitle").textContent = "快速記帳";
+      $("cancelExpenseEditBtn").classList.add("hidden");
+      $("expenseDate").value = today();
+      renderExpenseOptions();
+
+      const last = loadLastEntry();
+      $("expenseCurrency").value = state.trip.enabledCurrencies.includes(last?.currency) ? last.currency : state.trip.primaryCurrency;
+      $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
+      const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
+      state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
+      renderShareMemberChips();
+      $("expenseAmount").focus({ preventScroll: true });
+    }
+
+    function renderShareMemberChips() {
+      if (!state.trip) return;
+      if (!state.selectedShareMembers.size) state.trip.members.forEach((member) => state.selectedShareMembers.add(member));
+      $("shareMemberChips").innerHTML = state.trip.members.map((member) => `
+        <button type="button" class="chip ${state.selectedShareMembers.has(member) ? "active" : ""}" data-share-member="${escapeHtml(member)}">${escapeHtml(member)}</button>
+      `).join("") + `<button type="button" class="chip" data-share-all="true">全選</button>`;
+
+      const count = state.selectedShareMembers.size;
+      const mode = count === state.trip.members.length ? "全員平均" : count === 1 ? "個人消費" : "指定成員平均";
+      $("shareModeHint").textContent = count ? `${mode}｜共 ${count} 人分攤` : "請至少選擇一位分攤成員";
+    }
+
+    async function saveExpense(event) {
+      event.preventDefault();
+      if (!(await confirmServerBeforeWrite())) return;
+      const amount = safeNumber($("expenseAmount").value);
+      const shareMemberIds = [...state.selectedShareMembers];
+      if (amount <= 0) return toast("請輸入大於 0 的金額");
+      if (!shareMemberIds.length) return toast("請至少選擇一位分攤成員");
+
+      const data = {
+        amount,
+        currency: $("expenseCurrency").value,
+        payer: $("expensePayer").value,
+        category: $("expenseCategory").value,
+        shareMemberIds,
+        date: $("expenseDate").value,
+        note: $("expenseNote").value.trim()
+      };
+
+      const id = $("expenseId").value;
+      if (data.payer === "FUND") {
+        const totals = getCurrencyTotals();
+        let available = safeNumber(totals[data.currency]?.fundBalance);
+        if (id) {
+          const original = state.expenses.find((item) => item.id === id);
+          if (original?.payer === "FUND" && original.currency === data.currency) available += safeNumber(original.amount);
+        }
+        if (amount > available + 0.000001) {
+          return toast(`公基金餘額不足，目前可用 ${formatMoney(available, data.currency)}；請改選成員代墊`);
+        }
+      }
+
+      if (id) await updateDoc(doc(db, "trips", state.currentTripId, "expenses", id), data);
+      else await addDoc(collection(db, "trips", state.currentTripId, "expenses"), data);
+
+      saveLastEntry(data);
+      toast(id ? "記帳已修改" : "記帳已儲存");
+      prepareExpenseForm(true);
+    }
+
+    function editExpense(id) {
+      const expense = state.expenses.find((item) => item.id === id);
+      if (!expense) return;
+      navigate("add");
+      $("expenseId").value = expense.id;
+      $("expenseFormTitle").textContent = "修改記帳";
+      $("cancelExpenseEditBtn").classList.remove("hidden");
+      $("expenseAmount").value = expense.amount;
+      $("expenseCurrency").value = expense.currency;
+      $("expensePayer").value = expense.payer;
+      $("expenseCategory").value = expense.category;
+      $("expenseDate").value = expense.date;
+      $("expenseNote").value = expense.note || "";
+      state.selectedShareMembers = new Set(expense.shareMemberIds || []);
+      renderShareMemberChips();
+    }
+
+    async function removeExpense(id) {
+      if (!(await confirmServerBeforeWrite())) return;
+      if (!confirm("確定永久刪除這筆記帳？系統不會保留刪除紀錄。")) return;
+      await deleteDoc(doc(db, "trips", state.currentTripId, "expenses", id));
+      toast("記帳已刪除");
+    }
+
+    function getFilteredExpenses() {
+      const f = state.filters;
+      return state.expenses.filter((item) => {
+        if (f.startDate && item.date < f.startDate) return false;
+        if (f.endDate && item.date > f.endDate) return false;
+        if (f.category && item.category !== f.category) return false;
+        if (f.currency && item.currency !== f.currency) return false;
+        if (f.payer && item.payer !== f.payer) return false;
+        if (f.shareMember && !(item.shareMemberIds || []).includes(f.shareMember)) return false;
+        return true;
+      });
+    }
+
+    function renderExpenseList() {
+      if (!state.trip) return;
+      const items = getFilteredExpenses();
+      $("expenseList").innerHTML = items.length ? items.map((item) => {
+        const payer = item.payer === "FUND" ? "公基金" : `${item.payer}代墊`;
+        const shares = (item.shareMemberIds || []).join("、");
+        return `<article class="record">
+          <div>
+            <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
+            <div class="record-meta">${escapeHtml(item.date)}・${escapeHtml(payer)}<br>分攤：${escapeHtml(shares)}</div>
+          </div>
+          <div>
+            <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
+            <div class="record-actions">
+              <button class="mini-btn" data-edit-expense="${item.id}">修改</button>
+              <button class="mini-btn danger" data-delete-expense="${item.id}">刪除</button>
+            </div>
+          </div>
+        </article>`;
+      }).join("") : `<div class="card empty">目前沒有符合條件的帳務紀錄。</div>`;
+
+      const tags = [];
+      if (state.filters.startDate || state.filters.endDate) tags.push(`${state.filters.startDate || "不限"}～${state.filters.endDate || "不限"}`);
+      if (state.filters.category) tags.push(state.filters.category);
+      if (state.filters.currency) tags.push(state.filters.currency);
+      if (state.filters.payer) tags.push(state.filters.payer === "FUND" ? "支付者：公基金" : `支付者：${state.filters.payer}`);
+      if (state.filters.shareMember) tags.push(`分攤：${state.filters.shareMember}`);
+      $("filterSummary").innerHTML = tags.map((tag) => `<span class="filter-tag">${escapeHtml(tag)}</span>`).join("");
+    }
+
+    function renderFilterOptions() {
+      if (!state.trip) return;
+      $("filterCategory").innerHTML = `<option value="">全部分類</option>` + state.trip.categories.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+      $("filterCurrency").innerHTML = `<option value="">全部幣別</option>` + state.trip.enabledCurrencies.map((v) => `<option value="${v}">${v}</option>`).join("");
+      $("filterPayer").innerHTML = `<option value="">全部支付者</option><option value="FUND">公基金</option>` + state.trip.members.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+      $("filterShareMember").innerHTML = `<option value="">全部分攤成員</option>` + state.trip.members.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    }
+
+    function openFilter() {
+      $("filterStartDate").value = state.filters.startDate || "";
+      $("filterEndDate").value = state.filters.endDate || "";
+      $("filterCategory").value = state.filters.category || "";
+      $("filterCurrency").value = state.filters.currency || "";
+      $("filterPayer").value = state.filters.payer || "";
+      $("filterShareMember").value = state.filters.shareMember || "";
+      $("filterModal").classList.remove("hidden");
+    }
+
+    function applyFilter() {
+      state.filters = {
+        startDate: $("filterStartDate").value,
+        endDate: $("filterEndDate").value,
+        category: $("filterCategory").value,
+        currency: $("filterCurrency").value,
+        payer: $("filterPayer").value,
+        shareMember: $("filterShareMember").value
+      };
+      $("filterModal").classList.add("hidden");
+      renderExpenseList();
+    }
+
+    function renderFundOptions() {
+      if (!state.trip) return;
+      const current = $("fundCurrency").value;
+      $("fundCurrency").innerHTML = state.trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</option>`).join("");
+      $("fundCurrency").value = state.trip.enabledCurrencies.includes(current) ? current : state.trip.primaryCurrency;
+      updateFundPreview();
+    }
+
+    function prepareFundForm(forceReset = true) {
+      if (!state.trip) return;
+      if (forceReset || !$("fundId").value) {
+        $("fundForm").reset();
+        $("fundId").value = "";
+        $("fundDate").value = today();
+        state.fundMode = "perPerson";
+        $("cancelFundEditBtn").classList.add("hidden");
+      }
+      renderFundOptions();
+      setFundMode(state.fundMode);
+    }
+
+    function setFundMode(mode) {
+      state.fundMode = mode;
+      $("fundModePerPerson").classList.toggle("active", mode === "perPerson");
+      $("fundModeTotal").classList.toggle("active", mode === "total");
+      $("fundAmountLabel").textContent = mode === "perPerson" ? "每人儲值金額" : "儲值總金額";
+      updateFundPreview();
+    }
+
+    function updateFundPreview() {
+      if (!state.trip) return;
+      const amount = safeNumber($("fundAmount").value);
+      const currency = $("fundCurrency").value || state.trip.primaryCurrency;
+      const members = state.trip.members.length;
+      const total = state.fundMode === "perPerson" ? amount * members : amount;
+      const perPerson = state.fundMode === "perPerson" ? amount : members ? amount / members : 0;
+      $("fundPreview").textContent = `共 ${members} 人｜每人 ${formatMoney(perPerson, currency)}｜公基金增加 ${formatMoney(total, currency)}`;
+    }
+
+    async function saveFund(event) {
+      event.preventDefault();
+      if (!(await confirmServerBeforeWrite())) return;
+      const amount = safeNumber($("fundAmount").value);
+      if (amount <= 0) return toast("請輸入大於 0 的金額");
+      const memberCount = state.trip.members.length;
+      const totalAmount = state.fundMode === "perPerson" ? amount * memberCount : amount;
+      const perPersonAmount = state.fundMode === "perPerson" ? amount : totalAmount / memberCount;
+      const data = {
+        date: $("fundDate").value,
+        currency: $("fundCurrency").value,
+        inputMode: state.fundMode,
+        inputAmount: amount,
+        totalAmount,
+        perPersonAmount,
+        memberCount,
+        note: $("fundNote").value.trim()
+      };
+      const id = $("fundId").value;
+      if (id) await updateDoc(doc(db, "trips", state.currentTripId, "funds", id), data);
+      else await addDoc(collection(db, "trips", state.currentTripId, "funds"), data);
+      toast(id ? "公基金已修改" : "公基金已儲值");
+      prepareFundForm(true);
+    }
+
+    function editFund(id) {
+      const fund = state.funds.find((item) => item.id === id);
+      if (!fund) return;
+      navigate("fund");
+      $("fundId").value = fund.id;
+      $("fundDate").value = fund.date;
+      $("fundCurrency").value = fund.currency;
+      $("fundAmount").value = fund.inputAmount;
+      $("fundNote").value = fund.note || "";
+      $("cancelFundEditBtn").classList.remove("hidden");
+      setFundMode(fund.inputMode || "perPerson");
+    }
+
+    async function removeFund(id) {
+      if (!(await confirmServerBeforeWrite())) return;
+      if (!confirm("確定永久刪除這筆公基金儲值？系統不會保留刪除紀錄。")) return;
+      await deleteDoc(doc(db, "trips", state.currentTripId, "funds", id));
+      toast("公基金紀錄已刪除");
+    }
+
+    function renderFundList() {
+      $("fundList").innerHTML = state.funds.length ? state.funds.map((fund) => `
+        <article class="record">
+          <div>
+            <div class="record-title">公基金儲值${fund.note ? `｜${escapeHtml(fund.note)}` : ""}</div>
+            <div class="record-meta">${escapeHtml(fund.date)}・${fund.memberCount} 人<br>每人 ${formatMoney(fund.perPersonAmount, fund.currency)}</div>
+          </div>
+          <div>
+            <div class="record-amount">${formatMoney(fund.totalAmount, fund.currency)}</div>
+            <div class="record-actions">
+              <button class="mini-btn" data-edit-fund="${fund.id}">修改</button>
+              <button class="mini-btn danger" data-delete-fund="${fund.id}">刪除</button>
+            </div>
+          </div>
+        </article>`).join("") : `<div class="card empty">尚無公基金儲值紀錄。</div>`;
+    }
+
+    function calculateSettlementData() {
+      const result = {};
+      const members = state.trip.members;
+      const currencies = [...new Set([...state.trip.enabledCurrencies, ...state.expenses.map((x) => x.currency), ...state.funds.map((x) => x.currency)])];
+
+      currencies.forEach((currency) => {
+        const people = Object.fromEntries(members.map((member) => [member, {
+          member,
+          fundPaid: 0,
+          personalPaid: 0,
+          share: 0,
+          net: 0
+        }]));
+
+        const currencyFunds = state.funds.filter((item) => item.currency === currency);
+        currencyFunds.forEach((fund) => {
+          members.forEach((member) => {
+            people[member].fundPaid += safeNumber(fund.totalAmount) / Math.max(1, members.length);
+          });
+        });
+
+        state.expenses.filter((item) => item.currency === currency).forEach((expense) => {
+          if (expense.payer !== "FUND" && people[expense.payer]) people[expense.payer].personalPaid += safeNumber(expense.amount);
+          const shareMembers = (expense.shareMemberIds || []).filter((member) => people[member]);
+          const eachShare = shareMembers.length ? safeNumber(expense.amount) / shareMembers.length : 0;
+          shareMembers.forEach((member) => people[member].share += eachShare);
+        });
+
+        Object.values(people).forEach((person) => {
+          person.net = person.fundPaid + person.personalPaid - person.share;
+        });
+
+        const totalFund = currencyFunds.reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
+        const fundSpent = state.expenses.filter((item) => item.currency === currency && item.payer === "FUND").reduce((sum, item) => sum + safeNumber(item.amount), 0);
+        let fundBalance = totalFund - fundSpent;
+        const payments = [];
+
+        const creditors = Object.values(people).filter((person) => person.net > 0.000001).sort((a, b) => {
+          const aAdvanced = a.personalPaid > 0 ? 1 : 0;
+          const bAdvanced = b.personalPaid > 0 ? 1 : 0;
+          return bAdvanced - aAdvanced || b.personalPaid - a.personalPaid || b.net - a.net;
+        }).map((person) => ({ member: person.member, amount: person.net }));
+        const debtors = Object.values(people).filter((person) => person.net < -0.000001).map((person) => ({ member: person.member, amount: -person.net }));
+
+        for (const creditor of creditors) {
+          if (fundBalance <= 0) break;
+          const paid = Math.min(fundBalance, creditor.amount);
+          if (paid > 0.000001) {
+            payments.push({ from: "公基金", to: creditor.member, amount: paid, currency });
+            creditor.amount -= paid;
+            fundBalance -= paid;
+          }
+        }
+
+        let d = 0;
+        let c = 0;
+        while (d < debtors.length && c < creditors.length) {
+          if (debtors[d].amount <= 0.000001) { d++; continue; }
+          if (creditors[c].amount <= 0.000001) { c++; continue; }
+          const paid = Math.min(debtors[d].amount, creditors[c].amount);
+          payments.push({ from: debtors[d].member, to: creditors[c].member, amount: paid, currency });
+          debtors[d].amount -= paid;
+          creditors[c].amount -= paid;
+        }
+
+        result[currency] = {
+          people: Object.values(people),
+          totalFund,
+          fundSpent,
+          fundBalanceOriginal: totalFund - fundSpent,
+          payments
+        };
+      });
+      return result;
+    }
+
+    async function saveSettlement() {
+      if (!(await confirmServerBeforeWrite())) return;
+      const results = calculateSettlementData();
+      const data = {
+        calculatedAt: new Date().toISOString(),
+        results
+      };
+      await setDoc(doc(db, "trips", state.currentTripId, "settlements", "latest"), data);
+      state.settlement = data;
+      renderSettlement();
+      toast("結算已更新");
+    }
+
+    function renderSettlement() {
+      const data = state.settlement?.results || calculateSettlementData();
+      if (!state.trip) return;
+      const html = Object.entries(data).map(([currency, section]) => {
+        const peopleRows = section.people.map((person) => {
+          const status = person.net > .000001 ? `應收 ${formatMoney(person.net, currency)}` : person.net < -.000001 ? `應付 ${formatMoney(-person.net, currency)}` : "已平衡";
+          return `<div class="settlement-item"><div class="settlement-title">${escapeHtml(person.member)}｜${status}</div><div class="settlement-note">公基金投入 ${formatMoney(person.fundPaid, currency)}・個人代墊 ${formatMoney(person.personalPaid, currency)}・應負擔 ${formatMoney(person.share, currency)}</div></div>`;
+        }).join("");
+        const payments = section.payments.length ? section.payments.map((payment) => `<div class="settlement-item"><div class="settlement-title">${escapeHtml(payment.from)} → ${escapeHtml(payment.to)}：${formatMoney(payment.amount, currency)}</div></div>`).join("") : `<div class="empty">不需要額外付款。</div>`;
+        return `<div class="card"><h3>${currency} 結算</h3><div class="hint">公基金原始餘額：${formatMoney(section.fundBalanceOriginal, currency)}</div>${peopleRows}<h3 style="margin-top:16px">付款建議</h3>${payments}</div>`;
+      }).join("");
+      $("settlementContent").innerHTML = html || `<div class="card empty">尚無可結算資料。</div>`;
+    }
+
+    function renderStats() {
+      if (!state.trip) return;
+      const byCategory = {};
+      const byMember = {};
+      state.trip.members.forEach((member) => byMember[member] = 0);
+
+      state.expenses.forEach((expense) => {
+        const twd = convertToTwd(expense.amount, expense.currency);
+        byCategory[expense.category] = (byCategory[expense.category] || 0) + twd;
+        const shares = expense.shareMemberIds || [];
+        const each = shares.length ? twd / shares.length : 0;
+        shares.forEach((member) => byMember[member] = (byMember[member] || 0) + each);
+      });
+
+      const categoryRows = Object.entries(byCategory).sort((a,b) => b[1]-a[1]).map(([name, value]) => `<div class="currency-row"><div class="currency-name">${escapeHtml(name)}</div><div class="currency-value">約 ${formatMoney(value, "TWD")}</div></div>`).join("");
+      const memberRows = Object.entries(byMember).sort((a,b) => b[1]-a[1]).map(([name, value]) => `<div class="currency-row"><div class="currency-name">${escapeHtml(name)}</div><div class="currency-value">約 ${formatMoney(value, "TWD")}</div></div>`).join("");
+      $("statsContent").innerHTML = `<div class="card"><h3>依分類（參考台幣）</h3>${categoryRows || `<div class="empty">尚無資料</div>`}</div><div class="card"><h3>依分攤成員（參考台幣）</h3>${memberRows || `<div class="empty">尚無資料</div>`}</div>`;
+    }
+
+    function renderSettingsForm() {
+      if (!state.trip || state.activePage !== "settings") return;
+      $("tripName").value = state.trip.name || "";
+      $("tripStartDate").value = state.trip.startDate || "";
+      $("tripEndDate").value = state.trip.endDate || "";
+      $("tripMembers").value = state.trip.members.join("\n");
+      $("tripCategories").value = state.trip.categories.join("\n");
+      state.selectedSettingCurrencies = new Set(state.trip.enabledCurrencies);
+      renderCurrencySettingChips();
+    }
+
+    function renderCurrencySettingChips() {
+      $("currencySettingChips").innerHTML = Object.entries(APP_CONFIG.supportedCurrencies).map(([code, meta]) => `
+        <button type="button" class="chip ${state.selectedSettingCurrencies.has(code) ? "active" : ""}" data-setting-currency="${code}">${code} ${escapeHtml(meta.name)}</button>
+      `).join("");
+      const enabled = [...state.selectedSettingCurrencies];
+      const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
+      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency].name}</option>`).join("");
+      $("primaryCurrency").value = enabled.includes(current) ? current : enabled[0] || "";
+    }
+
+    async function saveSettings(event) {
+      event.preventDefault();
+      if (!(await confirmServerBeforeWrite())) return;
+      const members = $("tripMembers").value.split(/\n|,/).map((v) => v.trim()).filter(Boolean);
+      const categories = $("tripCategories").value.split(/\n/).map((v) => v.trim()).filter(Boolean);
+      const enabledCurrencies = [...state.selectedSettingCurrencies];
+      if (!members.length) return toast("至少需要一位旅程成員");
+      if (!enabledCurrencies.length) return toast("至少需要啟用一種幣別");
+      if (!categories.length) return toast("至少需要一個消費分類");
+      if ((state.expenses.length || state.funds.length) && JSON.stringify(members) !== JSON.stringify(state.trip.members)) {
+        return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
+      }
+      const data = {
+        name: $("tripName").value.trim() || "新的旅程",
+        startDate: $("tripStartDate").value,
+        endDate: $("tripEndDate").value,
+        members,
+        enabledCurrencies,
+        primaryCurrency: $("primaryCurrency").value,
+        categories
+      };
+      await updateDoc(doc(db, "trips", state.currentTripId), data);
+      clearLastEntry();
+      toast("旅程設定已儲存");
+      navigate("home");
+    }
+
+    async function deleteCollectionDocs(pathParts) {
+      const snap = await getDocs(collection(db, ...pathParts));
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 400).forEach((item) => batch.delete(item.ref));
+        await batch.commit();
+      }
+    }
+
+    async function clearTripData() {
+      if (!(await confirmServerBeforeWrite())) return;
+      const name = state.trip?.name || "目前旅程";
+      const confirmed = prompt(`這會永久刪除「${name}」的所有消費、公基金與結算資料，而且不保留刪除紀錄。\n\n請輸入「清空」確認：`);
+      if (confirmed !== "清空") return toast("已取消清空");
+
+      await deleteCollectionDocs(["trips", state.currentTripId, "expenses"]);
+      await deleteCollectionDocs(["trips", state.currentTripId, "funds"]);
+      await deleteCollectionDocs(["trips", state.currentTripId, "settlements"]);
+      await setDoc(doc(db, "trips", state.currentTripId), {
+        ...clone(APP_CONFIG.defaultTrip),
+        startDate: today(),
+        endDate: ""
+      });
+      clearLastEntry();
+      state.filters = {};
+      toast("資料已清空，可以開始新的旅程");
+      navigate("home");
+    }
+
+    async function exportWorkbook() {
+      if (!state.trip) return;
+      const settlement = state.settlement?.results || calculateSettlementData();
+      const wb = XLSX.utils.book_new();
+
+      const tripRows = [
+        ["項目", "內容"],
+        ["旅程名稱", state.trip.name],
+        ["開始日期", state.trip.startDate || ""],
+        ["結束日期", state.trip.endDate || ""],
+        ["參加成員", state.trip.members.join("、")],
+        ["啟用幣別", state.trip.enabledCurrencies.join("、")],
+        ["參考匯率日期", state.settings?.exchangeRateDate || ""],
+        ["匯出時間", new Date().toLocaleString("zh-TW", { hour12: false })]
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripRows), "旅行資料");
+
+      const expenseRows = state.expenses.map((item) => ({
+        日期: item.date,
+        分類: item.category,
+        幣別: item.currency,
+        金額: item.amount,
+        支付者: item.payer === "FUND" ? "公基金" : item.payer,
+        分攤成員: (item.shareMemberIds || []).join("、"),
+        備註: item.note || "",
+        參考台幣: convertToTwd(item.amount, item.currency)
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows.length ? expenseRows : [{ 說明: "尚無消費資料" }]), "消費明細");
+
+      const fundRows = state.funds.map((item) => ({
+        日期: item.date,
+        幣別: item.currency,
+        輸入方式: item.inputMode === "perPerson" ? "每人金額" : "總金額",
+        每人金額: item.perPersonAmount,
+        總金額: item.totalAmount,
+        人數: item.memberCount,
+        備註: item.note || ""
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fundRows.length ? fundRows : [{ 說明: "尚無公基金資料" }]), "公基金");
+
+      const settlementRows = [];
+      Object.entries(settlement).forEach(([currency, section]) => {
+        section.people.forEach((person) => settlementRows.push({
+          幣別: currency,
+          類型: "成員結算",
+          成員或付款者: person.member,
+          收款者: "",
+          公基金投入: person.fundPaid,
+          個人代墊: person.personalPaid,
+          應負擔: person.share,
+          淨額正數應收負數應付: person.net,
+          付款金額: ""
+        }));
+        section.payments.forEach((payment) => settlementRows.push({
+          幣別: currency,
+          類型: "付款建議",
+          成員或付款者: payment.from,
+          收款者: payment.to,
+          公基金投入: "",
+          個人代墊: "",
+          應負擔: "",
+          淨額正數應收負數應付: "",
+          付款金額: payment.amount
+        }));
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(settlementRows.length ? settlementRows : [{ 說明: "尚無結算資料" }]), "結算");
+
+      const filename = `${state.trip.name || "旅途記帳"}_${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+      XLSX.writeFile(wb, filename);
+      toast("Excel 已匯出");
+    }
+
+    document.addEventListener("click", async (event) => {
+      const nav = event.target.closest("[data-nav]")?.dataset.nav;
+      if (nav) { navigate(nav); return; }
+
+      const share = event.target.closest("[data-share-member]")?.dataset.shareMember;
+      if (share) {
+        if (state.selectedShareMembers.has(share)) state.selectedShareMembers.delete(share);
+        else state.selectedShareMembers.add(share);
+        renderShareMemberChips();
+        return;
+      }
+      if (event.target.closest("[data-share-all]")) {
+        state.selectedShareMembers = new Set(state.trip.members);
+        renderShareMemberChips();
+        return;
+      }
+
+      const settingCurrency = event.target.closest("[data-setting-currency]")?.dataset.settingCurrency;
+      if (settingCurrency) {
+        if (state.selectedSettingCurrencies.has(settingCurrency)) {
+          if (state.selectedSettingCurrencies.size === 1) return toast("至少要保留一種幣別");
+          state.selectedSettingCurrencies.delete(settingCurrency);
+        } else state.selectedSettingCurrencies.add(settingCurrency);
+        renderCurrencySettingChips();
+        return;
+      }
+
+      const editExpenseId = event.target.closest("[data-edit-expense]")?.dataset.editExpense;
+      if (editExpenseId) return editExpense(editExpenseId);
+      const deleteExpenseId = event.target.closest("[data-delete-expense]")?.dataset.deleteExpense;
+      if (deleteExpenseId) return removeExpense(deleteExpenseId);
+      const editFundId = event.target.closest("[data-edit-fund]")?.dataset.editFund;
+      if (editFundId) return editFund(editFundId);
+      const deleteFundId = event.target.closest("[data-delete-fund]")?.dataset.deleteFund;
+      if (deleteFundId) return removeFund(deleteFundId);
+    });
+
+    $("googleLoginBtn").addEventListener("click", login);
+    $("logoutBtn").addEventListener("click", () => signOut(auth));
+    $("expenseForm").addEventListener("submit", saveExpense);
+    $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
+    $("fundForm").addEventListener("submit", saveFund);
+    $("cancelFundEditBtn").addEventListener("click", () => prepareFundForm(true));
+    $("fundModePerPerson").addEventListener("click", () => setFundMode("perPerson"));
+    $("fundModeTotal").addEventListener("click", () => setFundMode("total"));
+    $("fundAmount").addEventListener("input", updateFundPreview);
+    $("fundCurrency").addEventListener("change", updateFundPreview);
+    $("openFilterBtn").addEventListener("click", openFilter);
+    $("closeFilterBtn").addEventListener("click", () => $("filterModal").classList.add("hidden"));
+    $("applyFilterBtn").addEventListener("click", applyFilter);
+    $("clearFilterBtn").addEventListener("click", () => {
+      state.filters = {};
+      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterShareMember"].forEach((id) => $(id).value = "");
+      applyFilter();
+    });
+    $("calculateSettlementBtn").addEventListener("click", saveSettlement);
+    $("settingsForm").addEventListener("submit", saveSettings);
+    $("clearTripBtn").addEventListener("click", clearTripData);
+    $("exportBtn").addEventListener("click", exportWorkbook);
+    $("networkPill").addEventListener("click", async () => {
+      await confirmServerBeforeWrite();
+      toast(state.serverReachable ? "Firebase 連線正常" : "目前為離線唯讀模式");
+    });
+
+    window.addEventListener("online", async () => {
+      state.online = true;
+      await confirmServerBeforeWrite();
+      updateExchangeRatesOnceDaily();
+    });
+    window.addEventListener("offline", () => {
+      state.online = false;
+      state.serverReachable = false;
+      updateNetworkUi();
+    });
+
+    try { await getRedirectResult(auth); } catch (error) { console.warn("Redirect result:", error); }
+
+    onAuthStateChanged(auth, async (user) => {
+      clearSubscriptions();
+      state.user = user;
+      if (!user) {
+        state.authorized = false;
+        $("loginScreen").classList.remove("hidden");
+        $("appShell").classList.add("hidden");
+        return;
+      }
+
+      const allowed = await verifyAuthorization(user);
+      if (!allowed) {
+        await signOut(auth);
+        $("loginError").textContent = "此帳號尚未獲授權使用本 App。";
+        $("loginError").classList.remove("hidden");
+        return;
+      }
+
+      state.authorized = true;
+      $("loginScreen").classList.add("hidden");
+      $("appShell").classList.remove("hidden");
+      try {
+        const settings = await ensureInitialData();
+        state.settings = settings;
+        state.currentTripId = settings.currentTripId;
+        await subscribeData();
+        updateNetworkUi();
+      } catch (error) {
+        console.error(error);
+        toast("初始化失敗，請確認網路與 Firestore 規則設定");
+      }
+    });
+  </script>
+</body>
+</html>
