@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#f8f4e8" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="旅途記帳" />
+  <meta name="apple-mobile-web-app-title" content="旅行記帳" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="apple-touch-icon" href="app-icon.png" />
   <link rel="icon" href="app-icon.png" />
-  <title>旅途記帳</title>
+  <title>旅行記帳</title>
 
   <style>
     :root {
@@ -117,13 +117,30 @@
 
     .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
     .grid-2 > * { min-width: 0; }
-    .date-grid input[type="date"] {
-      min-width: 0; max-width: 100%; width: 100%;
-      padding-left: 9px; padding-right: 7px; font-size: 15px;
-      -webkit-appearance: none; appearance: none;
+    /* iPhone Safari 的原生日期欄位有內建最小寬度，需全面覆寫，避免超出卡片。 */
+    .field, .grid-2, .grid-2 > div, form, .card { min-width: 0; }
+    input[type="date"] {
+      display: block;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      inline-size: 100% !important;
+      min-inline-size: 0 !important;
+      max-inline-size: 100% !important;
+      padding-left: 10px;
+      padding-right: 10px;
+      font-size: 16px;
+      -webkit-appearance: none;
+      appearance: none;
+      overflow: hidden;
     }
-    .date-grid input[type="date"]::-webkit-date-and-time-value {
-      min-width: 0; text-align: left;
+    input[type="date"]::-webkit-date-and-time-value {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      text-align: left;
     }
     .card {
       background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
@@ -163,6 +180,12 @@
     .amount-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 9px; }
     .amount-input { font-size: 25px; font-weight: 800; }
     .hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+    .save-status {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      font-size: 13px; font-weight: 750; text-align: center;
+    }
+    .save-status.success { color: var(--primary-dark); background: #f2f6e3; border: 1px solid #d5dfae; }
+    .save-status.error { color: #9b2e28; background: #fff0ee; border: 1px solid #efc2bd; }
 
     .segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
     .segment {
@@ -299,7 +322,6 @@
 
     @media (max-width: 390px) {
       .date-grid { gap: 7px; }
-      .date-grid input[type="date"] { padding-left: 7px; padding-right: 4px; font-size: 14px; }
     }
 
     @media (min-width: 720px) {
@@ -310,8 +332,8 @@
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
-    <img class="login-icon" src="app-icon.png" alt="旅途記帳 App Icon" />
-    <h1 id="loginTitle">旅途記帳</h1>
+    <img class="login-icon" src="app-icon.png" alt="旅行記帳 App Icon" />
+    <h1 id="loginTitle">旅行記帳</h1>
     <p>使用已授權的 Google 帳號登入，兩位使用者會共用同一份旅行帳務資料。</p>
     <button id="googleLoginBtn" class="google-btn">使用 Google 帳號登入</button>
     <div id="loginError" class="login-error hidden"></div>
@@ -328,7 +350,7 @@
           </svg>
         </div>
         <div class="title-wrap">
-          <h1 id="appTitle">旅途記帳</h1>
+          <h1 id="appTitle">旅行記帳</h1>
           <p id="tripHeader">正在讀取旅程…</p>
         </div>
         <button id="networkPill" class="status-pill" type="button">讀取中</button>
@@ -524,6 +546,7 @@
             </div>
           </div>
           <button id="saveSettingsBtn" class="primary-btn full" type="submit">儲存旅程設定</button>
+          <div id="settingsSaveStatus" class="save-status hidden" role="status" aria-live="polite"></div>
         </form>
 
         <div class="card danger-zone">
@@ -585,6 +608,21 @@
     const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
+    // 幣別清單保留在主程式作為保底；即使舊版 firebase-config.js 沒有此欄位，畫面仍會正常顯示。
+    const DEFAULT_CURRENCIES = {
+      TWD: { name: "新台幣", symbol: "NT$", decimals: 0 },
+      JPY: { name: "日圓", symbol: "¥", decimals: 0 },
+      KRW: { name: "韓元", symbol: "₩", decimals: 0 },
+      VND: { name: "越南盾", symbol: "₫", decimals: 0 },
+      USD: { name: "美元", symbol: "US$", decimals: 2 },
+      EUR: { name: "歐元", symbol: "€", decimals: 2 }
+    };
+    const CURRENCIES = {
+      ...DEFAULT_CURRENCIES,
+      ...((APP_CONFIG && APP_CONFIG.supportedCurrencies) || {})
+    };
+    const APP_NAME = String(APP_CONFIG?.appName || "旅行記帳").replaceAll("旅途", "旅行");
+
     const state = {
       user: null,
       authorized: false,
@@ -621,9 +659,9 @@
       db = getFirestore(app);
     }
 
-    document.title = APP_CONFIG.appName;
-    $("appTitle").textContent = APP_CONFIG.appName;
-    $("loginTitle").textContent = APP_CONFIG.appName;
+    document.title = APP_NAME;
+    $("appTitle").textContent = APP_NAME;
+    $("loginTitle").textContent = APP_NAME;
 
     function toast(message) {
       const el = $("toast");
@@ -634,7 +672,7 @@
     }
 
     function formatMoney(amount, currency) {
-      const meta = APP_CONFIG.supportedCurrencies[currency] || { symbol: currency, decimals: 2 };
+      const meta = CURRENCIES[currency] || { symbol: currency, decimals: 2 };
       const value = Number(amount || 0);
       return `${meta.symbol}${value.toLocaleString("zh-TW", {
         minimumFractionDigits: meta.decimals,
@@ -839,7 +877,7 @@
       state.trip.enabledCurrencies = Array.isArray(state.trip.enabledCurrencies) && state.trip.enabledCurrencies.length ? state.trip.enabledCurrencies : ["TWD"];
       state.trip.categories = Array.isArray(state.trip.categories) && state.trip.categories.length
         ? state.trip.categories
-        : clone(APP_CONFIG.defaultTrip.categories || ["其他"]);
+        : clone(APP_CONFIG.defaultTrip?.categories || ["餐飲", "交通", "住宿", "景點門票", "購物", "娛樂", "網路／SIM 卡", "保險", "簽證", "小費", "手續費", "其他"]);
       if (!state.trip.enabledCurrencies.includes(state.trip.primaryCurrency)) state.trip.primaryCurrency = state.trip.enabledCurrencies[0];
     }
 
@@ -854,7 +892,7 @@
         const sourceRates = data.rates || data.conversion_rates;
         if (!sourceRates) throw new Error("匯率格式不符");
         const rates = { TWD: 1 };
-        Object.keys(APP_CONFIG.supportedCurrencies).forEach((currency) => {
+        Object.keys(CURRENCIES).forEach((currency) => {
           if (currency === "TWD") return;
           const value = safeNumber(sourceRates[currency]);
           if (value > 0) rates[currency] = value;
@@ -944,7 +982,7 @@
       const totals = getCurrencyTotals();
       const rows = Object.entries(totals).map(([currency, value]) => `
         <div class="currency-row">
-          <div><div class="currency-name">${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</div><div class="currency-code">${currency}｜消費 ${formatMoney(value.expense, currency)}</div></div>
+          <div><div class="currency-name">${CURRENCIES[currency]?.name || currency}</div><div class="currency-code">${currency}｜消費 ${formatMoney(value.expense, currency)}</div></div>
           <div class="currency-value">基金餘額<br>${formatMoney(value.fundBalance, currency)}</div>
         </div>`).join("");
       $("currencyOverview").innerHTML = rows || `<div class="empty">尚無幣別資料</div>`;
@@ -954,7 +992,7 @@
       const trip = state.trip;
       if (!trip) return;
       const currentCurrency = $("expenseCurrency").value;
-      $("expenseCurrency").innerHTML = trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</option>`).join("");
+      $("expenseCurrency").innerHTML = trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
       if (trip.enabledCurrencies.includes(currentCurrency)) $("expenseCurrency").value = currentCurrency;
 
       const currentPayer = $("expensePayer").value;
@@ -1139,7 +1177,7 @@
     function renderFundOptions() {
       if (!state.trip) return;
       const current = $("fundCurrency").value;
-      $("fundCurrency").innerHTML = state.trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${APP_CONFIG.supportedCurrencies[currency]?.name || currency}</option>`).join("");
+      $("fundCurrency").innerHTML = state.trip.enabledCurrencies.map((currency) => `<option value="${currency}">${currency}｜${CURRENCIES[currency]?.name || currency}</option>`).join("");
       $("fundCurrency").value = state.trip.enabledCurrencies.includes(current) ? current : state.trip.primaryCurrency;
       updateFundPreview();
     }
@@ -1367,10 +1405,10 @@
       state.settingsDraftMembers = [...state.trip.members];
       state.settingsDraftCategories = [...state.trip.categories];
       state.selectedSettingCurrencies = new Set(
-        state.trip.enabledCurrencies.filter((code) => APP_CONFIG.supportedCurrencies[code])
+        state.trip.enabledCurrencies.filter((code) => CURRENCIES[code])
       );
       if (!state.selectedSettingCurrencies.size) {
-        state.selectedSettingCurrencies.add(APP_CONFIG.supportedCurrencies[state.trip.primaryCurrency] ? state.trip.primaryCurrency : "TWD");
+        state.selectedSettingCurrencies.add(CURRENCIES[state.trip.primaryCurrency] ? state.trip.primaryCurrency : "TWD");
       }
       renderMemberManageList();
       renderCategoryManageList();
@@ -1473,21 +1511,26 @@
     }
 
     function renderCurrencySettingChips() {
-      $("currencySettingChips").innerHTML = Object.entries(APP_CONFIG.supportedCurrencies).map(([code, meta]) => `
+      $("currencySettingChips").innerHTML = Object.entries(CURRENCIES).map(([code, meta]) => `
         <button type="button" class="chip ${state.selectedSettingCurrencies.has(code) ? "active" : ""}" data-setting-currency="${code}">${code} ${escapeHtml(meta.name)}</button>
       `).join("");
-      const enabled = Object.keys(APP_CONFIG.supportedCurrencies).filter((code) => state.selectedSettingCurrencies.has(code));
+      const enabled = Object.keys(CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       const current = $("primaryCurrency").value || state.trip?.primaryCurrency;
-      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(APP_CONFIG.supportedCurrencies[currency].name)}</option>`).join("");
+      $("primaryCurrency").innerHTML = enabled.map((currency) => `<option value="${currency}">${currency}｜${escapeHtml(CURRENCIES[currency].name)}</option>`).join("");
       $("primaryCurrency").value = enabled.includes(current) ? current : enabled[0] || "";
     }
 
     async function saveSettings(event) {
       event.preventDefault();
+      const button = $("saveSettingsBtn");
+      const status = $("settingsSaveStatus");
+      status.className = "save-status hidden";
+      status.textContent = "";
+
       if (!(await confirmServerBeforeWrite())) return;
       const members = [...state.settingsDraftMembers];
       const categories = [...state.settingsDraftCategories];
-      const enabledCurrencies = Object.keys(APP_CONFIG.supportedCurrencies).filter((code) => state.selectedSettingCurrencies.has(code));
+      const enabledCurrencies = Object.keys(CURRENCIES).filter((code) => state.selectedSettingCurrencies.has(code));
       if (!members.length) return toast("至少需要一位旅程成員");
       if (!enabledCurrencies.length) return toast("至少需要啟用一種幣別");
       if (!categories.length) return toast("至少需要一個消費分類");
@@ -1495,19 +1538,37 @@
       if ((state.expenses.length || state.funds.length) && JSON.stringify(members) !== JSON.stringify(state.trip.members)) {
         return toast("已有帳務後不可變更成員名單；請先匯出並清空目前旅程資料");
       }
-      const data = {
-        name: $("tripName").value.trim() || "新的旅程",
-        startDate: $("tripStartDate").value,
-        endDate: $("tripEndDate").value,
-        members,
-        enabledCurrencies,
-        primaryCurrency: $("primaryCurrency").value,
-        categories
-      };
-      await updateDoc(doc(db, "trips", state.currentTripId), data);
-      clearLastEntry();
-      toast("旅程設定已儲存");
-      navigate("home");
+
+      button.disabled = true;
+      button.textContent = "儲存中…";
+      try {
+        const data = {
+          name: $("tripName").value.trim() || "新的旅程",
+          startDate: $("tripStartDate").value,
+          endDate: $("tripEndDate").value,
+          members,
+          enabledCurrencies,
+          primaryCurrency: $("primaryCurrency").value,
+          categories
+        };
+        await updateDoc(doc(db, "trips", state.currentTripId), data);
+        clearLastEntry();
+        button.textContent = "已儲存 ✓";
+        status.textContent = "✓ 旅程設定已儲存";
+        status.className = "save-status success";
+        toast("旅程設定已儲存");
+        setTimeout(() => {
+          button.textContent = "儲存旅程設定";
+          updateNetworkUi();
+        }, 1600);
+      } catch (error) {
+        console.error("Save settings failed:", error);
+        button.textContent = "儲存旅程設定";
+        status.textContent = "儲存失敗，請確認網路連線與 Firebase 權限後再試一次。";
+        status.className = "save-status error";
+        toast("旅程設定儲存失敗");
+        updateNetworkUi();
+      }
     }
 
     async function deleteCollectionDocs(pathParts) {
@@ -1607,7 +1668,7 @@
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(settlementRows.length ? settlementRows : [{ 說明: "尚無結算資料" }]), "結算");
 
-      const filename = `${state.trip.name || "旅途記帳"}_${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+      const filename = `${state.trip.name || "旅行記帳"}_${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
       XLSX.writeFile(wb, filename);
       toast("Excel 已匯出");
     }
