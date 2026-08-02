@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v13：總額版面、篩選清除、帳務卡片配置與旅程刪除提示 -->
+  <!-- iPhone 修正版 v14：共同消費排除個人消費、成員統計保留個人消費、更多頁精簡 -->
 
   <style>
     :root {
@@ -616,8 +616,8 @@
       <section id="page-more" class="page">
         <div class="section-head"><div><h2>更多功能</h2></div></div>
         <div class="more-menu">
-          <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M15.5 8.3c-.8-.8-1.9-1.2-3.4-1.2-1.9 0-3.2 1-3.2 2.5 0 1.4 1.1 2.2 3.3 2.6 2.1.4 3.1 1.2 3.1 2.6 0 1.5-1.3 2.6-3.3 2.6-1.5 0-2.8-.5-3.7-1.4"></path><path d="M12 5.5v13"></path></svg></div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
-          <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
+          <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M15.5 8.3c-.8-.8-1.9-1.2-3.4-1.2-1.9 0-3.2 1-3.2 2.5 0 1.4 1.1 2.2 3.3 2.6 2.1.4 3.1 1.2 3.1 2.6 0 1.5-1.3 2.6-3.3 2.6-1.5 0-2.8-.5-3.7-1.4"></path><path d="M12 5.5v13"></path></svg></div><div class="more-title">公基金</div></button>
+          <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div></button>
           <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
           <button class="more-tile" data-nav="trips"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16v11H4z"></path><path d="M8 7.5V5h8v2.5M4 12h16M9.5 12v2h5v-2"></path></svg></div><div class="more-title">旅程管理</div><div class="more-note">建立與查看過往旅程</div></button>
           <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
@@ -1577,7 +1577,7 @@
       state.expenses.forEach((expense) => {
         const currency = expense.currency;
         result[currency] ||= { expense: 0, fundIn: 0, fundSpent: 0, fundBalance: 0, personalPaid: 0 };
-        result[currency].expense += safeNumber(expense.amount);
+        if (!isPersonalExpense(expense)) result[currency].expense += safeNumber(expense.amount);
         if (expense.payer === "FUND") result[currency].fundSpent += safeNumber(expense.amount);
         else result[currency].personalPaid += safeNumber(expense.amount);
       });
@@ -1607,7 +1607,7 @@
       $("homeTripName").textContent = trip.name;
       const dateText = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
       $("homeTripMeta").innerHTML = `<span>日期：${escapeHtml(dateText)}</span><span>成員：${trip.members.length} 人</span><span>幣別：${trip.enabledCurrencies.join("・")}</span>`;
-      const twdTotal = state.expenses.reduce((sum, item) => sum + convertToTwd(item.amount, item.currency), 0);
+      const twdTotal = state.expenses.reduce((sum, item) => sum + (isPersonalExpense(item) ? 0 : convertToTwd(item.amount, item.currency)), 0);
       $("referenceTwd").textContent = formatMoney(twdTotal, "TWD");
       $("rateUpdatedAt").textContent = formatRateUpdatedAt(state.settings?.exchangeRateUpdatedAt);
 
@@ -2017,6 +2017,13 @@
       return safeNumber(item.amount) / shareMembers.length;
     }
 
+    function isPersonalExpense(item) {
+      const shareMembers = uniqueTextList(item.shareMemberIds, state.trip?.members || []);
+      return item?.payer !== "FUND"
+        && shareMembers.length === 1
+        && shareMembers[0] === item?.payer;
+    }
+
     function sumAmountsByCurrency(items, selector) {
       const totals = {};
       items.forEach((item) => {
@@ -2052,7 +2059,7 @@
 
     function renderRecordTotals(items) {
       const container = $("recordTotals");
-      const grossTotals = sumAmountsByCurrency(items, (item) => item.amount);
+      const grossTotals = sumAmountsByCurrency(items, (item) => isPersonalExpense(item) ? 0 : item.amount);
       const selectedMember = state.filters.shareMember;
       const filtered = hasActiveRecordFilters();
       const memberTotals = selectedMember
@@ -2082,7 +2089,7 @@
             <div class="record-summary-label">篩選消費總額</div>
             <div class="record-summary-values">${renderAmountValues(grossTotals)}</div>
           </div>
-          ${selectedMember ? `<div class="record-summary-block"><div class="record-summary-label">${escapeHtml(selectedMember)} 分攤總額</div><div class="record-summary-values">${renderAmountValues(memberTotals)}</div></div>` : ""}
+          ${selectedMember ? `<div class="record-summary-block"><div class="record-summary-label">${escapeHtml(selectedMember)} 個人總消費額</div><div class="record-summary-values">${renderAmountValues(memberTotals)}</div></div>` : ""}
         </div>`;
     }
 
@@ -2472,7 +2479,10 @@
 
       state.expenses.forEach((expense) => {
         const twd = convertToTwd(expense.amount, expense.currency);
-        byCategory[expense.category] = (byCategory[expense.category] || 0) + twd;
+        // 分類統計對應共同旅行消費；個人消費僅在成員分攤統計中計入。
+        if (!isPersonalExpense(expense)) {
+          byCategory[expense.category] = (byCategory[expense.category] || 0) + twd;
+        }
         const shares = expense.shareMemberIds || [];
         const each = shares.length ? twd / shares.length : 0;
         shares.forEach((member) => byMember[member] = (byMember[member] || 0) + each);
