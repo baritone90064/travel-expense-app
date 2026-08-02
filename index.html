@@ -8,11 +8,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="旅行記帳" />
   <meta name="format-detection" content="telephone=no" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-v5.png?v=6" />
-  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=6" />
-  <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=6" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=7" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v6：登入圖示內嵌、分攤成員按鈕、儲存回饋優化 -->
+  <!-- iPhone 修正版 v7：多旅程管理、收據圖片、Storage 完整刪除、首頁字級優化 -->
 
   <style>
     :root {
@@ -108,11 +108,13 @@
       overflow: hidden;
       margin-bottom: 14px;
     }
-    .hero::after {
-      content: "✈︎";
-      position: absolute; right: 14px; top: 8px; font-size: 68px; color: rgba(75, 140, 171, .12);
-      transform: rotate(-8deg);
+    .hero-line-icon {
+      position: absolute; right: 14px; top: 13px; width: 58px; height: 58px;
+      display: grid; place-items: center; color: rgba(75, 140, 171, .28);
+      border: 1px solid rgba(75, 140, 171, .15); border-radius: 18px;
+      background: rgba(255,255,255,.40); transform: rotate(-5deg);
     }
+    .hero-line-icon svg { width: 36px; height: 36px; }
     .eyebrow { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
     .hero h2 { margin: 5px 0 7px; font-size: 25px; line-height: 1.2; max-width: 78%; }
     .hero-meta { font-size: 13px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
@@ -152,7 +154,7 @@
     .card h3 { margin: 0 0 11px; font-size: 16px; }
     .metric-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
     .metric-value { font-size: 23px; font-weight: 800; letter-spacing: -.4px; }
-    .metric-note { margin-top: 5px; font-size: 11px; color: var(--muted); }
+    .metric-note { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; line-height: 1.45; }
 
     .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 2px 10px; }
     .section-head h2 { font-size: 20px; margin: 0; }
@@ -268,6 +270,33 @@
       box-shadow: 0 7px 18px rgba(83, 97, 42, .18);
     }
     .share-member-chips .share-all-chip { grid-column: 1 / -1; }
+    .receipt-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .receipt-toolbar .secondary-btn { min-width: 148px; }
+    .receipt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .receipt-card { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f4f1e8; }
+    .receipt-card img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .receipt-remove {
+      position: absolute; right: 5px; top: 5px; width: 30px; height: 30px; border-radius: 999px;
+      border: 0; background: rgba(30,40,35,.78); color: #fff; font-size: 18px; line-height: 1;
+      display: grid; place-items: center; padding: 0;
+    }
+    .receipt-loading { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+    .record-receipts { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
+    .record-receipt-thumb { flex: 0 0 54px; width: 54px; height: 54px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #f4f1e8; }
+    .record-receipt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .trip-list { display: grid; gap: 10px; }
+    .trip-item { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 14px; }
+    .trip-item.current { border-color: #b9c58a; background: #fbfdf2; }
+    .trip-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .trip-item-name { font-size: 16px; font-weight: 850; }
+    .trip-item-meta { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 4px; }
+    .trip-badge { flex: 0 0 auto; border-radius: 999px; padding: 5px 8px; background: var(--primary-soft); color: var(--primary-dark); font-size: 11px; font-weight: 800; }
+    .trip-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
+    #page-home .hero-meta { font-size: 15px; line-height: 1.5; }
+    #page-home .metric-label { font-size: 14px; }
+    #page-home .metric-note { font-size: 13px; }
+    #page-home .section-head p { font-size: 14px; line-height: 1.5; }
+    #page-home .currency-code { font-size: 14px; line-height: 1.5; }
     .fund-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .fund-actions button { min-width: 148px; }
     .manage-list { display: grid; gap: 8px; margin-bottom: 10px; }
@@ -389,6 +418,12 @@
 
       <section id="page-home" class="page active">
         <div id="homeHero" class="hero">
+          <div class="hero-line-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3.5 15.5 20 6.2c.9-.5 1.9.4 1.4 1.3L12 21l-2.1-7.1-6.4 1.6Z"></path>
+              <path d="m9.9 13.9 5.3-3.2"></path>
+            </svg>
+          </div>
           <div class="eyebrow">Current trip</div>
           <h2 id="homeTripName">新的旅程</h2>
           <div id="homeTripMeta" class="hero-meta"></div>
@@ -398,7 +433,8 @@
           <div class="card">
             <div class="metric-label">參考台幣總花費</div>
             <div id="referenceTwd" class="metric-value">NT$0</div>
-            <div id="rateUpdatedAt" class="metric-note">匯率尚未更新</div>
+            <div id="rateUpdatedAt" class="metric-note">匯率更新：(僅供參考)
+尚未更新</div>
           </div>
           <div class="card soft">
             <div class="metric-label">記帳筆數</div>
@@ -429,7 +465,7 @@
       </section>
 
       <section id="page-add" class="page">
-        <div class="section-head"><div><h2 id="expenseFormTitle">快速記帳</h2><p>幣別、支付者與分攤成員會沿用上一筆</p></div></div>
+        <div class="section-head"><div><h2 id="expenseFormTitle">快速記帳</h2></div></div>
         <form id="expenseForm" class="card">
           <input id="expenseId" type="hidden" />
           <div class="field">
@@ -466,6 +502,16 @@
             <textarea id="expenseNote" placeholder="可輸入店家、地點或其他說明"></textarea>
           </div>
 
+          <div class="field">
+            <div class="receipt-toolbar">
+              <label style="margin:0">收據或付款截圖</label>
+              <button id="addReceiptBtn" class="secondary-btn" type="button">＋ 加入圖片</button>
+            </div>
+            <input id="receiptInput" class="hidden" type="file" accept="image/*" multiple />
+            <div id="receiptPreview" class="receipt-grid"></div>
+            <div class="hint">每筆最多 5 張。圖片會先在 iPhone 壓縮後再上傳。</div>
+          </div>
+
           <div class="expense-actions">
             <button id="cancelExpenseEditBtn" class="ghost-btn hidden" type="button">取消編輯</button>
             <button id="saveExpenseBtn" class="primary-btn" type="submit">儲存</button>
@@ -488,6 +534,7 @@
           <button class="more-tile" data-nav="fund"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M15.5 8.3c-.8-.8-1.9-1.2-3.4-1.2-1.9 0-3.2 1-3.2 2.5 0 1.4 1.1 2.2 3.3 2.6 2.1.4 3.1 1.2 3.1 2.6 0 1.5-1.3 2.6-3.3 2.6-1.5 0-2.8-.5-3.7-1.4"></path><path d="M12 5.5v13"></path></svg></div><div class="more-title">公基金</div><div class="more-note">儲值、修改與刪除</div></button>
           <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div><div class="more-note">分類與成員花費</div></button>
           <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
+          <button class="more-tile" data-nav="trips"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16v11H4z"></path><path d="M8 7.5V5h8v2.5M4 12h16M9.5 12v2h5v-2"></path></svg></div><div class="more-title">旅程管理</div><div class="more-note">建立與查看過往旅程</div></button>
           <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
         </div>
         <button id="logoutBtn" class="ghost-btn full" style="margin-top:16px">登出</button>
@@ -534,6 +581,14 @@
         <div id="statsContent"></div>
       </section>
 
+      <section id="page-trips" class="page">
+        <div class="section-head"><div><h2>旅程管理</h2><p>建立新旅程，或切換查看之前的旅行帳務</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <div class="card soft">
+          <button id="createTripBtn" class="primary-btn full" type="button">＋ 建立新旅程</button>
+        </div>
+        <div id="tripList" class="trip-list"></div>
+      </section>
+
       <section id="page-settings" class="page">
         <div class="section-head"><div><h2>旅程設定</h2></div><button class="icon-btn" data-nav="more">返回</button></div>
         <form id="settingsForm" class="card">
@@ -572,7 +627,7 @@
 
         <div class="card danger-zone">
           <h3>清空資料</h3>
-          <p class="hint">會永久刪除目前旅程的消費、公基金與結算資料，並建立空白旅程。依你的需求，不保留刪除或修改紀錄。</p>
+          <p class="hint">會永久清除目前旅程的消費、公基金、結算與全部收據圖片。若要保留歷史資料，請改用「旅程管理」建立新旅程。</p>
           <button id="clearTripBtn" class="danger-btn full">清空目前旅程資料</button>
         </div>
       </section>
@@ -623,6 +678,10 @@
       setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit,
       writeBatch
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+    import {
+      getStorage, ref as storageRef, uploadBytes, getDownloadURL,
+      deleteObject, listAll
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js";
     import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
 
     const $ = (id) => document.getElementById(id);
@@ -683,12 +742,16 @@
       selectedSettingCurrencies: new Set(),
       settingsDraftMembers: [],
       settingsDraftCategories: [],
+      tripList: [],
+      pendingAttachments: [],
+      attachmentUrlCache: new Map(),
       unsubscribers: [],
       activePage: "home"
     };
 
     const app = initializeApp(APP_CONFIG.firebaseConfig);
     const auth = getAuth(app);
+    const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
 
@@ -751,7 +814,7 @@
       pill.textContent = offline ? "離線唯讀" : "已連線";
       $("offlineBanner").classList.toggle("hidden", !offline);
 
-      document.querySelectorAll("#expenseForm input, #expenseForm select, #expenseForm textarea, #expenseForm button, #fundForm input, #fundForm select, #fundForm textarea, #fundForm button, #settingsForm input, #settingsForm select, #settingsForm textarea, #settingsForm button, #clearTripBtn, #calculateSettlementBtn, .record-actions button").forEach((el) => {
+      document.querySelectorAll("#expenseForm input, #expenseForm select, #expenseForm textarea, #expenseForm button, #fundForm input, #fundForm select, #fundForm textarea, #fundForm button, #settingsForm input, #settingsForm select, #settingsForm textarea, #settingsForm button, #clearTripBtn, #calculateSettlementBtn, #createTripBtn, .trip-actions button, .record-actions button").forEach((el) => {
         el.disabled = offline;
       });
       // 離線仍可使用篩選、切換頁面、匯出與登出。
@@ -877,7 +940,8 @@
       const trip = {
         ...clone(APP_CONFIG.defaultTrip),
         startDate: today(),
-        endDate: ""
+        endDate: "",
+        createdAt: new Date().toISOString()
       };
       const settings = {
         currentTripId: tripRef.id,
@@ -909,22 +973,31 @@
         if (state.settings.currentTripId) saveLocalTripState(state.settings.currentTripId);
         if (state.currentTripId !== state.settings.currentTripId) {
           state.currentTripId = state.settings.currentTripId;
+          resetExpenseAttachmentDraft();
           subscribeTripCollections();
         }
         renderAll();
         updateNetworkUi();
         if (navigator.onLine) updateExchangeRatesOnceDaily();
       });
-      state.unsubscribers.push(settingsUnsub);
-      // 初始化時 state.currentTripId 已存在；不能只等待 ID 改變，否則關閉重開後不會重新訂閱旅程資料。
+
+      const tripsUnsub = onSnapshot(collection(db, "trips"), { includeMetadataChanges: true }, (snap) => {
+        state.tripList = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+        renderTripList();
+      }, (error) => console.error("Trips subscription:", error));
+
+      state.unsubscribers.push(settingsUnsub, tripsUnsub);
       if (state.currentTripId) subscribeTripCollections();
     }
 
     function subscribeTripCollections() {
-      state.unsubscribers.slice(1).forEach((unsub) => { try { unsub(); } catch {} });
-      state.unsubscribers = state.unsubscribers.slice(0, 1);
+      state.unsubscribers.slice(2).forEach((unsub) => { try { unsub(); } catch {} });
+      state.unsubscribers = state.unsubscribers.slice(0, 2);
       if (!state.currentTripId) return;
 
+      state.expenses = [];
+      state.funds = [];
+      state.settlement = null;
       const tripRef = doc(db, "trips", state.currentTripId);
       const tripUnsub = onSnapshot(tripRef, { includeMetadataChanges: true }, (snap) => {
         if (!snap.exists()) return;
@@ -1024,6 +1097,7 @@
       window.scrollTo({ top: 0, behavior: "instant" });
       if (page === "add") prepareExpenseForm();
       if (page === "settings") renderSettingsForm();
+      if (page === "trips") renderTripList();
       if (page === "stats") renderStats();
       if (page === "settlement") renderSettlement();
       if (page === "fund") prepareFundForm(false);
@@ -1041,6 +1115,7 @@
       renderStats();
       renderSettlement();
       renderSettingsForm();
+      renderTripList();
     }
 
     function renderHeader() {
@@ -1068,18 +1143,28 @@
       return result;
     }
 
+    function formatRateUpdatedAt(value) {
+      if (!value) return "匯率更新：(僅供參考)\n尚未更新";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "匯率更新：(僅供參考)\n尚未更新";
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const d = date.getDate();
+      const hh = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      return `匯率更新：(僅供參考)\n${y}/${m}/${d} ${hh}:${mm}`;
+    }
+
     function renderHome() {
       const trip = state.trip;
       $("homeTripName").textContent = trip.name;
       const dateText = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
-      $("homeTripMeta").innerHTML = `<span>🗓 ${escapeHtml(dateText)}</span><span>👥 ${trip.members.length} 人</span><span>💱 ${trip.enabledCurrencies.join("・")}</span>`;
+      $("homeTripMeta").innerHTML = `<span>日期：${escapeHtml(dateText)}</span><span>成員：${trip.members.length} 人</span><span>幣別：${trip.enabledCurrencies.join("・")}</span>`;
       $("expenseCount").textContent = state.expenses.length.toLocaleString("zh-TW");
 
       const twdTotal = state.expenses.reduce((sum, item) => sum + convertToTwd(item.amount, item.currency), 0);
       $("referenceTwd").textContent = formatMoney(twdTotal, "TWD");
-      $("rateUpdatedAt").textContent = state.settings?.exchangeRateUpdatedAt
-        ? `匯率更新：${new Date(state.settings.exchangeRateUpdatedAt).toLocaleString("zh-TW", { hour12: false })}（僅供參考）`
-        : "尚無匯率資料；外幣不列入參考台幣總額";
+      $("rateUpdatedAt").textContent = formatRateUpdatedAt(state.settings?.exchangeRateUpdatedAt);
 
       const totals = getCurrencyTotals();
       const rows = Object.entries(totals).map(([currency, value]) => `
@@ -1114,9 +1199,165 @@
       renderShareMemberChips();
     }
 
+    function makeId() {
+      return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function resetExpenseAttachmentDraft() {
+      state.pendingAttachments.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+      state.pendingAttachments = [];
+      if ($("receiptInput")) $("receiptInput").value = "";
+      if ($("receiptPreview")) $("receiptPreview").innerHTML = "";
+    }
+
+    function getEditingExpense() {
+      const id = $("expenseId")?.value;
+      return id ? state.expenses.find((item) => item.id === id) : null;
+    }
+
+    async function resolveAttachmentUrl(path) {
+      if (!path) return "";
+      if (state.attachmentUrlCache.has(path)) return state.attachmentUrlCache.get(path);
+      const url = await getDownloadURL(storageRef(storage, path));
+      state.attachmentUrlCache.set(path, url);
+      return url;
+    }
+
+    async function hydrateAttachmentImages(root = document) {
+      const images = [...root.querySelectorAll("img[data-storage-path]")];
+      await Promise.all(images.map(async (img) => {
+        if (img.dataset.loaded === "true") return;
+        try {
+          img.src = await resolveAttachmentUrl(img.dataset.storagePath);
+          img.dataset.loaded = "true";
+        } catch (error) {
+          console.warn("Attachment preview failed:", error);
+          img.alt = "圖片無法讀取";
+        }
+      }));
+    }
+
+    function renderReceiptPreview() {
+      const container = $("receiptPreview");
+      if (!container) return;
+      const existing = getEditingExpense()?.attachments || [];
+      const existingHtml = existing.map((item) => `
+        <div class="receipt-card">
+          <img data-storage-path="${escapeHtml(item.storagePath || "")}" alt="已上傳收據" />
+          <button class="receipt-remove" type="button" data-delete-attachment-path="${escapeHtml(item.storagePath || "")}" aria-label="刪除圖片">×</button>
+        </div>`).join("");
+      const pendingHtml = state.pendingAttachments.map((item) => `
+        <div class="receipt-card">
+          <img src="${item.previewUrl}" alt="待上傳圖片" />
+          <button class="receipt-remove" type="button" data-remove-pending-attachment="${item.id}" aria-label="移除圖片">×</button>
+        </div>`).join("");
+      container.innerHTML = existingHtml + pendingHtml;
+      container.classList.toggle("hidden", !(existing.length || state.pendingAttachments.length));
+      hydrateAttachmentImages(container);
+    }
+
+    async function compressImage(file) {
+      if (!file.type?.startsWith("image/")) throw new Error("只能上傳圖片檔");
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("圖片無法讀取"));
+          img.src = objectUrl;
+        });
+        const maxSide = 1600;
+        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+        const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+        const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { alpha: false });
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.78));
+        if (!blob) throw new Error("圖片壓縮失敗");
+        return blob;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    async function uploadPendingAttachments(expenseId, button) {
+      const uploaded = [];
+      for (let index = 0; index < state.pendingAttachments.length; index++) {
+        const item = state.pendingAttachments[index];
+        button.textContent = `上傳圖片 ${index + 1}/${state.pendingAttachments.length}…`;
+        const blob = await compressImage(item.file);
+        if (blob.size > 5 * 1024 * 1024) throw new Error("圖片壓縮後仍超過 5 MB");
+        const path = `trips/${state.currentTripId}/receipts/${expenseId}/${makeId()}.jpg`;
+        const ref = storageRef(storage, path);
+        await uploadBytes(ref, blob, {
+          contentType: "image/jpeg",
+          customMetadata: { tripId: state.currentTripId, expenseId }
+        });
+        uploaded.push({
+          storagePath: path,
+          fileName: item.file.name || "receipt.jpg",
+          contentType: "image/jpeg",
+          size: blob.size
+        });
+      }
+      return uploaded;
+    }
+
+    async function deleteAttachmentObject(path) {
+      if (!path) return;
+      try {
+        await deleteObject(storageRef(storage, path));
+      } catch (error) {
+        if (error?.code !== "storage/object-not-found") throw error;
+      } finally {
+        state.attachmentUrlCache.delete(path);
+      }
+    }
+
+    async function removeExistingAttachment(path) {
+      const expense = getEditingExpense();
+      if (!expense || !path) return;
+      if (!(await confirmServerBeforeWrite())) return;
+      if (!confirm("確定刪除這張圖片？")) return;
+      try {
+        await deleteAttachmentObject(path);
+        const attachments = (expense.attachments || []).filter((item) => item.storagePath !== path);
+        await updateDoc(doc(db, "trips", state.currentTripId, "expenses", expense.id), { attachments });
+        expense.attachments = attachments;
+        renderReceiptPreview();
+        renderExpenseList();
+        toast("圖片已刪除");
+      } catch (error) {
+        console.error("Delete attachment failed:", error);
+        toast("圖片刪除失敗");
+      }
+    }
+
+    async function handleReceiptSelection(files) {
+      const existingCount = getEditingExpense()?.attachments?.length || 0;
+      const available = 5 - existingCount - state.pendingAttachments.length;
+      if (available <= 0) return toast("每筆最多 5 張圖片");
+      const selected = [...files].slice(0, available);
+      if (selected.length < files.length) toast("每筆最多 5 張，已只加入前幾張");
+      selected.forEach((file) => {
+        if (!file.type?.startsWith("image/")) return;
+        state.pendingAttachments.push({ id: makeId(), file, previewUrl: URL.createObjectURL(file) });
+      });
+      $("receiptInput").value = "";
+      renderReceiptPreview();
+    }
+
     function prepareExpenseForm(forceReset = false) {
       if (!state.trip) return;
       if ($("expenseId").value && !forceReset) return;
+      resetExpenseAttachmentDraft();
       $("expenseForm").reset();
       $("expenseId").value = "";
       $("expenseFormTitle").textContent = "快速記帳";
@@ -1130,6 +1371,7 @@
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
       renderShareMemberChips();
+      renderReceiptPreview();
       $("expenseAmount").focus({ preventScroll: true });
     }
 
@@ -1173,13 +1415,11 @@
       };
 
       const id = $("expenseId").value;
+      const original = id ? state.expenses.find((item) => item.id === id) : null;
       if (data.payer === "FUND") {
         const totals = getCurrencyTotals();
         let available = safeNumber(totals[data.currency]?.fundBalance);
-        if (id) {
-          const original = state.expenses.find((item) => item.id === id);
-          if (original?.payer === "FUND" && original.currency === data.currency) available += safeNumber(original.amount);
-        }
+        if (original?.payer === "FUND" && original.currency === data.currency) available += safeNumber(original.amount);
         if (amount > available + 0.000001) {
           return toast(`公基金餘額不足，目前可用 ${formatMoney(available, data.currency)}；請改選成員代墊`);
         }
@@ -1188,15 +1428,20 @@
       const button = $("saveExpenseBtn");
       button.disabled = true;
       button.textContent = "儲存中…";
+      const expenseRef = id
+        ? doc(db, "trips", state.currentTripId, "expenses", id)
+        : doc(collection(db, "trips", state.currentTripId, "expenses"));
+      const uploaded = [];
 
       try {
-        // 先確認 Firebase 真的可連線，避免 Firestore 在離線時把寫入排隊。
         if (!(await confirmServerBeforeWrite())) return;
-
-        if (id) await updateDoc(doc(db, "trips", state.currentTripId, "expenses", id), data);
-        else await addDoc(collection(db, "trips", state.currentTripId, "expenses"), data);
-
+        if (state.pendingAttachments.length) {
+          uploaded.push(...await uploadPendingAttachments(expenseRef.id, button));
+        }
+        const attachments = [...(original?.attachments || []), ...uploaded];
+        await setDoc(expenseRef, { ...data, attachments }, { merge: true });
         saveLastEntry(data);
+        resetExpenseAttachmentDraft();
         button.textContent = "已儲存 ✓";
         toast("已儲存");
         setTimeout(() => {
@@ -1205,7 +1450,8 @@
         }, 850);
       } catch (error) {
         console.error("Save expense failed:", error);
-        toast("儲存失敗，請稍後再試");
+        await Promise.all(uploaded.map((item) => deleteAttachmentObject(item.storagePath).catch(() => {})));
+        toast(error?.message || "儲存失敗，請稍後再試");
       } finally {
         setTimeout(() => {
           button.disabled = false;
@@ -1228,14 +1474,23 @@
       $("expenseDate").value = expense.date;
       $("expenseNote").value = expense.note || "";
       state.selectedShareMembers = new Set(expense.shareMemberIds || []);
+      resetExpenseAttachmentDraft();
       renderShareMemberChips();
+      renderReceiptPreview();
     }
 
     async function removeExpense(id) {
       if (!(await confirmServerBeforeWrite())) return;
-      if (!confirm("確定永久刪除這筆記帳？系統不會保留刪除紀錄。")) return;
-      await deleteDoc(doc(db, "trips", state.currentTripId, "expenses", id));
-      toast("記帳已刪除");
+      if (!confirm("確定永久刪除這筆記帳與全部收據圖片？系統不會保留刪除紀錄。")) return;
+      const expense = state.expenses.find((item) => item.id === id);
+      try {
+        for (const item of expense?.attachments || []) await deleteAttachmentObject(item.storagePath);
+        await deleteDoc(doc(db, "trips", state.currentTripId, "expenses", id));
+        toast("記帳與圖片已刪除");
+      } catch (error) {
+        console.error("Delete expense failed:", error);
+        toast("刪除失敗；為避免留下圖片，帳務尚未刪除");
+      }
     }
 
     function getFilteredExpenses() {
@@ -1261,6 +1516,7 @@
           <div>
             <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
             <div class="record-meta">${escapeHtml(item.date)}・${escapeHtml(payer)}<br>分攤：${escapeHtml(shares)}</div>
+            ${(item.attachments || []).length ? `<div class="record-receipts">${(item.attachments || []).map((attachment) => `<div class="record-receipt-thumb"><img data-storage-path="${escapeHtml(attachment.storagePath || "")}" alt="收據縮圖" /></div>`).join("")}</div>` : ""}
           </div>
           <div>
             <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
@@ -1279,6 +1535,7 @@
       if (state.filters.payer) tags.push(state.filters.payer === "FUND" ? "支付者：公基金" : `支付者：${state.filters.payer}`);
       if (state.filters.shareMember) tags.push(`分攤：${state.filters.shareMember}`);
       $("filterSummary").innerHTML = tags.map((tag) => `<span class="filter-tag">${escapeHtml(tag)}</span>`).join("");
+      hydrateAttachmentImages($("expenseList"));
     }
 
     function renderFilterOptions() {
@@ -1537,6 +1794,157 @@
       $("statsContent").innerHTML = `<div class="card"><h3>依分類（參考台幣）</h3>${categoryRows || `<div class="empty">尚無資料</div>`}</div><div class="card"><h3>依分攤成員（參考台幣）</h3>${memberRows || `<div class="empty">尚無資料</div>`}</div>`;
     }
 
+    function renderTripList() {
+      const container = $("tripList");
+      if (!container) return;
+      const trips = [...state.tripList].sort((a, b) => {
+        const ad = a.startDate || a.createdAt || "";
+        const bd = b.startDate || b.createdAt || "";
+        return bd.localeCompare(ad);
+      });
+      container.innerHTML = trips.length ? trips.map((trip) => {
+        const current = trip.id === state.currentTripId;
+        const dates = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
+        return `<article class="trip-item ${current ? "current" : ""}">
+          <div class="trip-item-head">
+            <div><div class="trip-item-name">${escapeHtml(trip.name || "新的旅程")}</div><div class="trip-item-meta">${escapeHtml(dates)}<br>${(trip.members || []).length} 位成員・${(trip.enabledCurrencies || []).join("・") || "尚未設定幣別"}</div></div>
+            ${current ? `<span class="trip-badge">目前旅程</span>` : ""}
+          </div>
+          <div class="trip-actions">
+            ${current ? `<button class="mini-btn" type="button" data-nav="home">查看</button>` : `<button class="mini-btn" type="button" data-switch-trip="${trip.id}">切換查看</button>`}
+            <button class="mini-btn danger" type="button" data-delete-trip="${trip.id}">刪除旅程</button>
+          </div>
+        </article>`;
+      }).join("") : `<div class="card empty">尚無旅程資料</div>`;
+      updateNetworkUi();
+    }
+
+    function buildNewTripData() {
+      const source = state.trip || APP_CONFIG.defaultTrip || {};
+      return {
+        name: "新的旅程",
+        startDate: today(),
+        endDate: "",
+        members: uniqueTextList(source.members, ["A", "B"]),
+        enabledCurrencies: uniqueTextList(source.enabledCurrencies, ["TWD", "JPY"]).filter((code) => DEFAULT_CURRENCIES[code]),
+        primaryCurrency: source.primaryCurrency || "JPY",
+        categories: uniqueTextList(source.categories, DEFAULT_CATEGORIES),
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    async function createTripDocument(makeCurrent = true) {
+      const tripRef = doc(collection(db, "trips"));
+      const data = buildNewTripData();
+      const batch = writeBatch(db);
+      batch.set(tripRef, data);
+      if (makeCurrent) batch.set(doc(db, "appSettings", "main"), { currentTripId: tripRef.id }, { merge: true });
+      await batch.commit();
+      return { id: tripRef.id, ...data };
+    }
+
+    async function createNewTrip() {
+      if (!(await confirmServerBeforeWrite())) return;
+      const button = $("createTripBtn");
+      button.disabled = true;
+      button.textContent = "建立中…";
+      try {
+        const trip = await createTripDocument(true);
+        state.currentTripId = trip.id;
+        state.trip = trip;
+        saveLocalTripState(trip.id, trip);
+        resetExpenseAttachmentDraft();
+        subscribeTripCollections();
+        navigate("settings");
+        toast("新旅程已建立");
+      } catch (error) {
+        console.error("Create trip failed:", error);
+        toast("建立旅程失敗");
+      } finally {
+        button.disabled = false;
+        button.textContent = "＋ 建立新旅程";
+      }
+    }
+
+    async function switchTrip(tripId) {
+      if (!tripId || tripId === state.currentTripId) return navigate("home");
+      if (!(await confirmServerBeforeWrite())) return;
+      try {
+        await setDoc(doc(db, "appSettings", "main"), { currentTripId: tripId }, { merge: true });
+        state.currentTripId = tripId;
+        state.trip = state.tripList.find((item) => item.id === tripId) || null;
+        saveLocalTripState(tripId, state.trip);
+        resetExpenseAttachmentDraft();
+        subscribeTripCollections();
+        navigate("home");
+        toast("已切換旅程");
+      } catch (error) {
+        console.error("Switch trip failed:", error);
+        toast("切換旅程失敗");
+      }
+    }
+
+    async function deleteStorageTree(path) {
+      const root = storageRef(storage, path);
+      const result = await listAll(root);
+      for (const item of result.items) await deleteAttachmentObject(item.fullPath);
+      for (const prefix of result.prefixes) await deleteStorageTree(prefix.fullPath);
+    }
+
+    async function collectTripAttachmentPaths(tripId) {
+      const snap = await getDocs(collection(db, "trips", tripId, "expenses"));
+      return snap.docs.flatMap((item) => (item.data().attachments || []).map((attachment) => attachment.storagePath).filter(Boolean));
+    }
+
+    async function deleteTripStorage(tripId) {
+      const knownPaths = await collectTripAttachmentPaths(tripId);
+      for (const path of knownPaths) await deleteAttachmentObject(path);
+      try {
+        await deleteStorageTree(`trips/${tripId}/receipts`);
+      } catch (error) {
+        const ignorable = ["storage/object-not-found", "storage/bucket-not-found"].includes(error?.code) && knownPaths.length === 0;
+        if (!ignorable) throw error;
+      }
+    }
+
+    async function deleteTripResources(tripId) {
+      await deleteTripStorage(tripId);
+      await deleteCollectionDocs(["trips", tripId, "expenses"]);
+      await deleteCollectionDocs(["trips", tripId, "funds"]);
+      await deleteCollectionDocs(["trips", tripId, "settlements"]);
+      await deleteDoc(doc(db, "trips", tripId));
+    }
+
+    async function deleteTrip(tripId) {
+      const trip = state.tripList.find((item) => item.id === tripId);
+      if (!trip) return;
+      if (!(await confirmServerBeforeWrite())) return;
+      const confirmed = prompt(`這會永久刪除「${trip.name || "新的旅程"}」以及全部帳務與收據圖片。\\n\\n請輸入「刪除」確認：`);
+      if (confirmed !== "刪除") return toast("已取消刪除");
+
+      try {
+        let replacementId = state.currentTripId;
+        if (tripId === state.currentTripId) {
+          const other = state.tripList.find((item) => item.id !== tripId);
+          if (other) replacementId = other.id;
+          else replacementId = (await createTripDocument(false)).id;
+          await setDoc(doc(db, "appSettings", "main"), { currentTripId: replacementId }, { merge: true });
+        }
+        await deleteTripResources(tripId);
+        if (tripId === state.currentTripId) {
+          state.currentTripId = replacementId;
+          saveLocalTripState(replacementId);
+          resetExpenseAttachmentDraft();
+          subscribeTripCollections();
+        }
+        toast("旅程與全部圖片已刪除");
+        renderTripList();
+      } catch (error) {
+        console.error("Delete trip failed:", error);
+        toast("刪除失敗；為避免留下圖片，旅程尚未完整刪除");
+      }
+    }
+
     function renderSettingsForm() {
       if (!state.trip || state.activePage !== "settings") return;
       $("tripName").value = state.trip.name || "";
@@ -1761,6 +2169,12 @@
       const confirmed = prompt(`這會永久刪除「${name}」的所有消費、公基金與結算資料，而且不保留刪除紀錄。\n\n請輸入「清空」確認：`);
       if (confirmed !== "清空") return toast("已取消清空");
 
+      try {
+        await deleteTripStorage(state.currentTripId);
+      } catch (error) {
+        console.error("Clear trip images failed:", error);
+        return toast("收據圖片刪除失敗，已停止清空以避免留下孤兒檔案");
+      }
       await deleteCollectionDocs(["trips", state.currentTripId, "expenses"]);
       await deleteCollectionDocs(["trips", state.currentTripId, "funds"]);
       await deleteCollectionDocs(["trips", state.currentTripId, "settlements"]);
@@ -1771,7 +2185,7 @@
       });
       clearLastEntry();
       state.filters = {};
-      toast("資料已清空，可以開始新的旅程");
+      toast("資料與全部圖片已清空");
       navigate("home");
     }
 
@@ -1800,6 +2214,8 @@
         支付者: item.payer === "FUND" ? "公基金" : item.payer,
         分攤成員: (item.shareMemberIds || []).join("、"),
         備註: item.note || "",
+        圖片數量: (item.attachments || []).length,
+        圖片路徑: (item.attachments || []).map((attachment) => attachment.storagePath).join("、"),
         參考台幣: convertToTwd(item.amount, item.currency)
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows.length ? expenseRows : [{ 說明: "尚無消費資料" }]), "消費明細");
@@ -1892,6 +2308,23 @@
       const deleteCategoryIndex = event.target.closest("[data-delete-category-index]")?.dataset.deleteCategoryIndex;
       if (deleteCategoryIndex !== undefined) return deleteDraftCategory(Number(deleteCategoryIndex));
 
+      const pendingAttachmentId = event.target.closest("[data-remove-pending-attachment]")?.dataset.removePendingAttachment;
+      if (pendingAttachmentId) {
+        const index = state.pendingAttachments.findIndex((item) => item.id === pendingAttachmentId);
+        if (index >= 0) {
+          URL.revokeObjectURL(state.pendingAttachments[index].previewUrl);
+          state.pendingAttachments.splice(index, 1);
+          renderReceiptPreview();
+        }
+        return;
+      }
+      const attachmentPath = event.target.closest("[data-delete-attachment-path]")?.dataset.deleteAttachmentPath;
+      if (attachmentPath) return removeExistingAttachment(attachmentPath);
+      const switchTripId = event.target.closest("[data-switch-trip]")?.dataset.switchTrip;
+      if (switchTripId) return switchTrip(switchTripId);
+      const deleteTripId = event.target.closest("[data-delete-trip]")?.dataset.deleteTrip;
+      if (deleteTripId) return deleteTrip(deleteTripId);
+
       const editExpenseId = event.target.closest("[data-edit-expense]")?.dataset.editExpense;
       if (editExpenseId) return editExpense(editExpenseId);
       const deleteExpenseId = event.target.closest("[data-delete-expense]")?.dataset.deleteExpense;
@@ -1906,6 +2339,8 @@
     $("logoutBtn").addEventListener("click", () => signOut(auth));
     $("expenseForm").addEventListener("submit", saveExpense);
     $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
+    $("addReceiptBtn").addEventListener("click", () => $("receiptInput").click());
+    $("receiptInput").addEventListener("change", (event) => handleReceiptSelection(event.target.files || []));
     $("fundForm").addEventListener("submit", saveFund);
     $("cancelFundEditBtn").addEventListener("click", () => prepareFundForm(true));
     $("fundModePerPerson").addEventListener("click", () => setFundMode("perPerson"));
@@ -1931,6 +2366,7 @@
       if (event.key === "Enter") { event.preventDefault(); addDraftCategory(); }
     });
     $("clearTripBtn").addEventListener("click", clearTripData);
+    $("createTripBtn").addEventListener("click", createNewTrip);
     $("exportBtn").addEventListener("click", exportWorkbook);
     $("networkPill").addEventListener("click", async () => {
       await confirmServerBeforeWrite();
