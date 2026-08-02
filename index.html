@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v12：帳務篩選加總、個人分攤、排序圖示、公基金總額與導覽修正 -->
+  <!-- iPhone 修正版 v13：總額版面、篩選清除、帳務卡片配置與旅程刪除提示 -->
 
   <style>
     :root {
@@ -211,16 +211,33 @@
       background: #fff; border: 1px solid var(--line); border-radius: 17px; padding: 13px;
       display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center;
     }
+    .expense-record { align-items: stretch; }
+    .record-main { min-width: 0; }
+    .record-side {
+      min-width: 112px; display: flex; flex-direction: column; align-items: flex-end;
+      align-self: stretch;
+    }
     .record-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
     .record-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
     .record-amount { font-size: 17px; font-weight: 900; text-align: right; }
     .record-actions { margin-top: 7px; display: flex; gap: 6px; justify-content: flex-end; }
+    .expense-record .record-actions { margin-top: auto; padding-top: 10px; }
     .mini-btn { border: 0; border-radius: 10px; min-height: 34px; padding: 6px 10px; font-size: 12px; font-weight: 750; background: #f3f1eb; color: var(--text); }
     .mini-btn.danger { color: var(--danger); background: #fff0ee; }
 
-    .filter-summary { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
-    .filter-summary::-webkit-scrollbar { display: none; }
+    .filter-summary:not(:empty) { margin-bottom: 9px; }
+    .filter-summary-panel {
+      position: relative; min-height: 48px; padding: 10px 46px 10px 11px;
+      background: #fff; border: 1px solid var(--line); border-radius: 15px;
+      box-shadow: 0 5px 16px rgba(70, 68, 55, .045);
+    }
+    .filter-summary-tags { display: flex; flex-wrap: wrap; gap: 7px; }
     .filter-tag { white-space: nowrap; background: var(--primary-soft); color: var(--primary-dark); border: 1px solid #dce3bb; border-radius: 999px; font-size: 12px; padding: 6px 9px; }
+    .filter-summary-clear {
+      position: absolute; right: 8px; top: 7px; width: 34px; height: 34px; padding: 0;
+      display: grid; place-items: center; border: 0; border-radius: 999px;
+      background: #f3f1eb; color: var(--muted); font-size: 22px; line-height: 1;
+    }
 
     .currency-table { display: grid; gap: 8px; }
     .currency-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
@@ -324,11 +341,19 @@
     .record-member-share {
       margin-top: 6px; color: var(--primary-dark); font-size: 12px; font-weight: 850;
       background: var(--primary-soft); border-radius: 9px; padding: 5px 7px;
-      display: inline-flex;
+      display: inline-flex; text-align: right;
     }
-    .fund-total-summary { padding: 13px 14px; }
-    .fund-total-title { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
-    .fund-total-values { display: flex; flex-wrap: wrap; gap: 7px; }
+    .fund-total-summary,
+    .record-summary.simple-total {
+      padding: 13px 14px;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center; gap: 8px;
+    }
+    .fund-total-title { grid-column: 1; color: var(--muted); font-size: 12px; }
+    .fund-total-values {
+      grid-column: 2; display: flex; flex-wrap: wrap; justify-content: center; gap: 7px;
+      text-align: center;
+    }
     .fund-total-value {
       border-radius: 999px; padding: 7px 10px; background: var(--primary-soft);
       color: var(--primary-dark); font-size: 14px; font-weight: 850;
@@ -494,22 +519,15 @@
           <div id="homeTripMeta" class="hero-meta"></div>
         </div>
 
-        <div class="grid-2">
-          <div class="card">
-            <div class="metric-label">參考台幣總花費</div>
-            <div id="referenceTwd" class="metric-value">NT$0</div>
-            <div id="rateUpdatedAt" class="metric-note">匯率更新：(僅供參考)
+        <div class="card">
+          <div class="metric-label">參考台幣總花費</div>
+          <div id="referenceTwd" class="metric-value">NT$0</div>
+          <div id="rateUpdatedAt" class="metric-note">匯率更新：(僅供參考)
 尚未更新</div>
-          </div>
-          <div class="card soft">
-            <div class="metric-label">記帳筆數</div>
-            <div id="expenseCount" class="metric-value">0</div>
-            <div class="metric-note">共同消費與個人消費</div>
-          </div>
         </div>
 
         <div class="card">
-          <div class="section-head"><div><h2>各幣別概況</h2><p>公基金餘額與總消費分開顯示</p></div></div>
+          <div class="section-head"><div><h2>各幣別概況</h2><p>總消費金額與公基金餘額</p></div></div>
           <div id="currencyOverview" class="currency-table"></div>
         </div>
 
@@ -528,7 +546,6 @@
           </div>
         </div>
         <div id="filterSummary" class="filter-summary"></div>
-        <div style="height:9px"></div>
         <div id="recordTotals" class="record-summary card"></div>
         <div id="expenseList" class="list"></div>
       </section>
@@ -1590,8 +1607,6 @@
       $("homeTripName").textContent = trip.name;
       const dateText = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
       $("homeTripMeta").innerHTML = `<span>日期：${escapeHtml(dateText)}</span><span>成員：${trip.members.length} 人</span><span>幣別：${trip.enabledCurrencies.join("・")}</span>`;
-      $("expenseCount").textContent = state.expenses.length.toLocaleString("zh-TW");
-
       const twdTotal = state.expenses.reduce((sum, item) => sum + convertToTwd(item.amount, item.currency), 0);
       $("referenceTwd").textContent = formatMoney(twdTotal, "TWD");
       $("rateUpdatedAt").textContent = formatRateUpdatedAt(state.settings?.exchangeRateUpdatedAt);
@@ -2036,20 +2051,35 @@
     }
 
     function renderRecordTotals(items) {
+      const container = $("recordTotals");
       const grossTotals = sumAmountsByCurrency(items, (item) => item.amount);
       const selectedMember = state.filters.shareMember;
+      const filtered = hasActiveRecordFilters();
       const memberTotals = selectedMember
         ? sumAmountsByCurrency(items, (item) => getExpenseShareAmount(item, selectedMember))
         : null;
-      const title = hasActiveRecordFilters() ? "篩選結果" : "全部帳務";
-      $("recordTotals").innerHTML = `
+
+      container.classList.toggle("simple-total", !filtered);
+      if (!filtered) {
+        const currencies = [...new Set([...(state.trip?.enabledCurrencies || []), ...Object.keys(grossTotals)])]
+          .filter((currency) => safeNumber(grossTotals[currency]) > 0);
+        container.innerHTML = `
+          <div class="fund-total-title">消費總額</div>
+          <div class="fund-total-values">${currencies.length
+            ? currencies.map((currency) => `<span class="fund-total-value">${formatMoney(grossTotals[currency], currency)}</span>`).join("")
+            : `<span class="record-summary-value">—</span>`}
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
         <div class="record-summary-head">
-          <div class="record-summary-title">${title}</div>
+          <div class="record-summary-title">篩選結果</div>
           <div class="record-summary-count">${items.length} 筆</div>
         </div>
         <div class="record-summary-grid ${selectedMember ? "two" : ""}">
           <div class="record-summary-block">
-            <div class="record-summary-label">${hasActiveRecordFilters() ? "篩選消費總額" : "消費總額"}</div>
+            <div class="record-summary-label">篩選消費總額</div>
             <div class="record-summary-values">${renderAmountValues(grossTotals)}</div>
           </div>
           ${selectedMember ? `<div class="record-summary-block"><div class="record-summary-label">${escapeHtml(selectedMember)} 分攤總額</div><div class="record-summary-values">${renderAmountValues(memberTotals)}</div></div>` : ""}
@@ -2061,17 +2091,17 @@
       const shares = (item.shareMemberIds || []).join("、");
       const selectedMember = state.filters.shareMember;
       const selectedMemberShare = getExpenseShareAmount(item, selectedMember);
-      return `<article class="record">
-        <div>
+      return `<article class="record expense-record">
+        <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
           <div class="record-meta">${escapeHtml(payer)}・分攤：${escapeHtml(shares)}</div>
-          ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} 分攤：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           ${item._pendingSync ? `<div class="sync-note">等待同步</div>` : ""}
           ${safeNumber(item.pendingAttachmentCount) ? `<div class="sync-note">${safeNumber(item.pendingAttachmentCount)} 張收據等待上傳</div>` : ""}
           ${(item.attachments || []).length ? `<div class="record-receipts">${(item.attachments || []).map((attachment) => `<button class="record-receipt-thumb" type="button" data-view-attachment-path="${escapeHtml(attachment.storagePath || "")}" aria-label="查看收據圖片"><img data-storage-path="${escapeHtml(attachment.storagePath || "")}" alt="收據縮圖" /></button>`).join("")}</div>` : ""}
         </div>
-        <div>
+        <div class="record-side">
           <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
+          ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} 分攤：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           <div class="record-actions">
             <button class="mini-btn" data-edit-expense="${item.id}">修改</button>
             <button class="mini-btn danger" data-delete-expense="${item.id}">刪除</button>
@@ -2114,7 +2144,11 @@
       if (state.filters.currency) tags.push(state.filters.currency);
       if (state.filters.payer) tags.push(state.filters.payer === "FUND" ? "支付者：公基金" : `支付者：${state.filters.payer}`);
       if (state.filters.shareMember) tags.push(`分攤：${state.filters.shareMember}`);
-      $("filterSummary").innerHTML = tags.map((tag) => `<span class="filter-tag">${escapeHtml(tag)}</span>`).join("");
+      $("filterSummary").innerHTML = tags.length ? `
+        <div class="filter-summary-panel">
+          <div class="filter-summary-tags">${tags.map((tag) => `<span class="filter-tag">${escapeHtml(tag)}</span>`).join("")}</div>
+          <button class="filter-summary-clear" type="button" data-clear-record-filters aria-label="清除篩選" title="清除篩選">×</button>
+        </div>` : "";
       hydrateAttachmentImages($("expenseList"));
     }
 
@@ -2145,6 +2179,14 @@
         payer: $("filterPayer").value,
         shareMember: $("filterShareMember").value
       };
+      $("filterModal").classList.add("hidden");
+      renderExpenseList();
+    }
+
+    function clearRecordFilters() {
+      state.filters = {};
+      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterShareMember"]
+        .forEach((id) => { if ($(id)) $(id).value = ""; });
       $("filterModal").classList.add("hidden");
       renderExpenseList();
     }
@@ -2567,7 +2609,7 @@
       const trip = state.tripList.find((item) => item.id === tripId);
       if (!trip) return;
       if (!(await confirmServerBeforeWrite())) return;
-      const confirmed = prompt(`這會永久刪除「${trip.name || "新的旅程"}」以及全部帳務與收據圖片。\\n\\n請輸入「刪除」確認：`);
+      const confirmed = prompt(`這會永久刪除「${trip.name || "新的旅程"}」。\\n請輸入「刪除」確認：`);
       if (confirmed !== "刪除") return toast("已取消刪除");
 
       try {
@@ -2990,6 +3032,11 @@
       const deleteCategoryIndex = event.target.closest("[data-delete-category-index]")?.dataset.deleteCategoryIndex;
       if (deleteCategoryIndex !== undefined) return deleteDraftCategory(Number(deleteCategoryIndex));
 
+      if (event.target.closest("[data-clear-record-filters]")) {
+        clearRecordFilters();
+        return;
+      }
+
       const viewAttachmentPath = event.target.closest("[data-view-attachment-path]")?.dataset.viewAttachmentPath;
       if (viewAttachmentPath) return openAttachmentViewer(viewAttachmentPath);
 
@@ -3057,11 +3104,7 @@
     });
     $("closeFilterBtn").addEventListener("click", () => $("filterModal").classList.add("hidden"));
     $("applyFilterBtn").addEventListener("click", applyFilter);
-    $("clearFilterBtn").addEventListener("click", () => {
-      state.filters = {};
-      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterShareMember"].forEach((id) => $(id).value = "");
-      applyFilter();
-    });
+    $("clearFilterBtn").addEventListener("click", clearRecordFilters);
     $("calculateSettlementBtn").addEventListener("click", saveSettlement);
     $("settingsForm").addEventListener("submit", saveSettings);
     $("addMemberBtn").addEventListener("click", addDraftMember);
