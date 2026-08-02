@@ -717,7 +717,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
     import {
       getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
-      getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence
+      getRedirectResult, onAuthStateChanged, signOut
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
       initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -1220,41 +1220,54 @@
 
     async function login() {
       const button = $("googleLoginBtn");
+      const errorBox = $("loginError");
       const originalText = button.textContent;
-      $("loginError").classList.add("hidden");
+
+      errorBox.textContent = "";
+      errorBox.classList.add("hidden");
       button.disabled = true;
       button.textContent = "登入中…";
 
       try {
-        await setPersistence(auth, browserLocalPersistence);
+        // iPhone Safari / 加入主畫面的 Web App 要求登入視窗直接由這次點擊觸發。
+        // 此處不可先 await 其他 Promise，否則瀏覽器可能把 Google 視窗視為非使用者操作而擋下。
         await signInWithPopup(auth, provider);
       } catch (error) {
-        console.error("Google login failed:", error);
-        const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
-        const redirectFallbackCodes = ["auth/popup-blocked", "auth/cancelled-popup-request", "auth/web-storage-unsupported"];
+        console.error("Google popup login failed:", error);
 
-        if (!standalone && redirectFallbackCodes.includes(error?.code)) {
+        const fallbackCodes = new Set([
+          "auth/popup-blocked",
+          "auth/cancelled-popup-request",
+          "auth/web-storage-unsupported",
+          "auth/operation-not-supported-in-this-environment"
+        ]);
+
+        if (fallbackCodes.has(error?.code)) {
           try {
             button.textContent = "正在前往 Google…";
             await signInWithRedirect(auth, provider);
             return;
           } catch (redirectError) {
             console.error("Google redirect login failed:", redirectError);
+            error = redirectError;
           }
         }
 
         let message = "登入失敗，請重新點選登入。";
-        if (standalone && redirectFallbackCodes.includes(error?.code)) {
-          message = "iPhone 主畫面模式無法開啟登入視窗。請先用 Safari 開啟網站完成登入，再回到主畫面 App。";
-        } else if (error?.code === "auth/unauthorized-domain") {
+        if (error?.code === "auth/unauthorized-domain") {
           message = "此 GitHub Pages 網域尚未加入 Firebase Authentication 的 Authorized domains。";
         } else if (error?.code === "auth/popup-closed-by-user") {
-          message = "登入視窗已關閉，請重新點選登入。";
+          message = "Google 登入視窗已關閉，請重新點選登入。";
+        } else if (error?.code === "auth/network-request-failed") {
+          message = "目前無法連線 Google 登入服務，請確認網路後再試。";
+        } else if (error?.code) {
+          message = `登入失敗：${error.code}`;
         } else if (error?.message) {
           message = `登入失敗：${error.message}`;
         }
-        $("loginError").textContent = message;
-        $("loginError").classList.remove("hidden");
+
+        errorBox.textContent = message;
+        errorBox.classList.remove("hidden");
       } finally {
         button.disabled = false;
         button.textContent = originalText;
@@ -2888,6 +2901,7 @@
       }, 180);
     });
 
+    window.__travelLedgerModuleReady = true;
     $("googleLoginBtn").addEventListener("click", login);
     $("logoutBtn").addEventListener("click", () => signOut(auth));
     $("expenseForm").addEventListener("submit", saveExpense);
@@ -2959,7 +2973,13 @@
       }
     });
 
-    try { await getRedirectResult(auth); } catch (error) { console.warn("Redirect result:", error); }
+    getRedirectResult(auth).catch((error) => {
+      console.warn("Redirect result:", error);
+      if ($("loginError") && !state.user) {
+        $("loginError").textContent = `登入導回處理失敗：${error?.code || error?.message || "未知錯誤"}`;
+        $("loginError").classList.remove("hidden");
+      }
+    });
 
     onAuthStateChanged(auth, async (user) => {
       clearSubscriptions();
