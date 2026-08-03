@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v18：操作圖示化、成員統計重排、匯率文字精簡 -->
+  <!-- iPhone 修正版 v19：成員統計灰字與間距微調 -->
 
   <style>
     :root {
@@ -261,14 +261,18 @@
     }
     .stats-member-row:last-child { border-bottom: 0; }
     .stats-member-name { min-width: 0; font-size: 14px; font-weight: 850; overflow-wrap: anywhere; }
-    .stats-member-lines { min-width: 0; display: grid; gap: 5px; }
+    .stats-member-lines {
+      min-width: 0; display: grid; gap: 5px;
+      transform: translateX(-1em);
+      width: calc(100% + 1em);
+    }
     .stats-member-line {
-      min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px;
+      min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1em;
       align-items: baseline; color: var(--muted); font-size: 11px; line-height: 1.35;
     }
     .stats-member-line strong {
-      min-width: 0; color: var(--text); font-size: 12px; font-weight: 850;
-      text-align: right; white-space: nowrap;
+      min-width: 0; color: inherit; font-size: inherit; font-weight: 700;
+      text-align: left; white-space: nowrap;
     }
     .stats-member-total { min-width: 0; text-align: right; }
     .stats-member-total-value { margin-top: 4px; font-size: 14px; font-weight: 900; white-space: nowrap; }
@@ -524,8 +528,8 @@
       .record-head-tools { flex-direction: row; align-items: center; }
       #openFilterBtn { min-height: 40px; }
       .stats-member-row { grid-template-columns: minmax(52px, .65fr) minmax(0, 1.55fr) minmax(88px, .9fr); gap: 6px; }
-      .stats-member-line { gap: 4px; font-size: 10px; }
-      .stats-member-line strong { font-size: 11px; }
+      .stats-member-line { gap: 1em; font-size: 10px; }
+      .stats-member-line strong { font-size: inherit; }
       .stats-member-total-value { font-size: 12px; }
     }
 
