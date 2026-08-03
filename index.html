@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v17：儲存後返回帳務、分類原幣明細、首頁橫式固定版面 -->
+  <!-- iPhone 修正版 v18：操作圖示化、成員統計重排、匯率文字精簡 -->
 
   <style>
     :root {
@@ -255,6 +255,23 @@
     .stats-category-toggle { margin-bottom: 12px; }
     .stats-member-breakdown { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
     .stats-member-total-label { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .stats-member-row {
+      display: grid; grid-template-columns: minmax(58px, .72fr) minmax(0, 1.7fr) minmax(94px, .95fr);
+      gap: 9px; align-items: center; padding: 11px 0; border-bottom: 1px dashed var(--line);
+    }
+    .stats-member-row:last-child { border-bottom: 0; }
+    .stats-member-name { min-width: 0; font-size: 14px; font-weight: 850; overflow-wrap: anywhere; }
+    .stats-member-lines { min-width: 0; display: grid; gap: 5px; }
+    .stats-member-line {
+      min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px;
+      align-items: baseline; color: var(--muted); font-size: 11px; line-height: 1.35;
+    }
+    .stats-member-line strong {
+      min-width: 0; color: var(--text); font-size: 12px; font-weight: 850;
+      text-align: right; white-space: nowrap;
+    }
+    .stats-member-total { min-width: 0; text-align: right; }
+    .stats-member-total-value { margin-top: 4px; font-size: 14px; font-weight: 900; white-space: nowrap; }
 
     .settlement-item { padding: 11px 0; border-bottom: 1px dashed var(--line); }
     .settlement-item:last-child { border-bottom: 0; }
@@ -332,6 +349,16 @@
       display: grid; place-items: center;
     }
     .sort-icon-btn svg { width: 22px; height: 22px; }
+    .search-icon-btn {
+      width: 44px; min-width: 44px; min-height: 44px; padding: 0;
+      display: grid; place-items: center;
+    }
+    .search-icon-btn svg { width: 21px; height: 21px; }
+    .icon-action-btn {
+      width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0;
+      display: grid; place-items: center;
+    }
+    .icon-action-btn svg { width: 17px; height: 17px; display: block; }
     .record-summary { padding: 13px 14px; }
     .record-summary-head {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -421,6 +448,7 @@
       background: #f3f1eb; color: var(--text); font-size: 12px; font-weight: 750;
     }
     .manage-btn.delete { color: var(--danger); background: #fff0ee; }
+    .manage-btn.icon-action-btn { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; }
     .inline-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
     .inline-add input { min-width: 0; }
     .inline-add button { min-width: 76px; }
@@ -495,6 +523,10 @@
       #page-records .section-head { align-items: center; }
       .record-head-tools { flex-direction: row; align-items: center; }
       #openFilterBtn { min-height: 40px; }
+      .stats-member-row { grid-template-columns: minmax(52px, .65fr) minmax(0, 1.55fr) minmax(88px, .9fr); gap: 6px; }
+      .stats-member-line { gap: 4px; font-size: 10px; }
+      .stats-member-line strong { font-size: 11px; }
+      .stats-member-total-value { font-size: 12px; }
     }
 
     @media (min-width: 720px) {
@@ -547,7 +579,7 @@
         <div class="card home-reference-card">
           <div class="home-reference-copy">
             <div class="metric-label">參考台幣共同消費</div>
-            <div id="rateUpdatedAt" class="metric-note">匯率更新：尚未更新（僅供參考）</div>
+            <div id="rateUpdatedAt" class="metric-note">匯率更新：尚未更新</div>
           </div>
           <div id="referenceTwd" class="metric-value">NT$0</div>
         </div>
@@ -568,7 +600,7 @@
           <div><h2>帳務紀錄</h2></div>
           <div class="record-head-tools">
             <button id="recordSortBtn" class="icon-btn sort-icon-btn" type="button" aria-label="日期新到舊" title="日期新到舊"></button>
-            <button id="openFilterBtn" class="icon-btn">篩選</button>
+            <button id="openFilterBtn" class="icon-btn search-icon-btn" type="button" aria-label="篩選帳務" title="篩選帳務"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"></circle><path d="m15.5 15.5 4.4 4.4"></path></svg></button>
           </div>
         </div>
         <div id="filterSummary" class="filter-summary"></div>
@@ -702,7 +734,7 @@
       </section>
 
       <section id="page-stats" class="page">
-        <div class="section-head"><div><h2>統計分析</h2><p>不同幣別保留原幣，同時提供參考台幣</p></div><button class="icon-btn" data-nav="more">返回</button></div>
+        <div class="section-head"><div><h2>統計分析</h2></div><button class="icon-btn" data-nav="more">返回</button></div>
         <div id="statsContent"></div>
       </section>
 
@@ -1629,15 +1661,15 @@
     }
 
     function formatRateUpdatedAt(value) {
-      if (!value) return "匯率更新：尚未更新（僅供參考）";
+      if (!value) return "匯率更新：尚未更新";
       const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "匯率更新：尚未更新（僅供參考）";
+      if (Number.isNaN(date.getTime())) return "匯率更新：尚未更新";
       const y = date.getFullYear();
       const m = date.getMonth() + 1;
       const d = date.getDate();
       const hh = String(date.getHours()).padStart(2, "0");
       const mm = String(date.getMinutes()).padStart(2, "0");
-      return `匯率更新：${y}/${m}/${d} ${hh}:${mm}（僅供參考）`;
+      return `匯率更新：${y}/${m}/${d} ${hh}:${mm}`;
     }
 
     function renderHome() {
@@ -2207,8 +2239,8 @@
           <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
           ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} ${personal ? "個人消費" : "分攤"}：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           <div class="record-actions">
-            <button class="mini-btn" data-edit-expense="${item.id}">修改</button>
-            <button class="mini-btn danger" data-delete-expense="${item.id}">刪除</button>
+            <button class="mini-btn icon-action-btn" type="button" data-edit-expense="${item.id}" aria-label="修改記帳" title="修改記帳"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></button>
+            <button class="mini-btn danger icon-action-btn" type="button" data-delete-expense="${item.id}" aria-label="刪除記帳" title="刪除記帳"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></button>
           </div>
         </div>
       </article>`;
@@ -2451,8 +2483,8 @@
           <div>
             <div class="record-amount">${formatMoney(fund.totalAmount, fund.currency)}</div>
             <div class="record-actions">
-              <button class="mini-btn" data-edit-fund="${fund.id}">修改</button>
-              <button class="mini-btn danger" data-delete-fund="${fund.id}">刪除</button>
+              <button class="mini-btn icon-action-btn" type="button" data-edit-fund="${fund.id}" aria-label="修改公基金儲值" title="修改公基金儲值"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></button>
+              <button class="mini-btn danger icon-action-btn" type="button" data-delete-fund="${fund.id}" aria-label="刪除公基金儲值" title="刪除公基金儲值"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></button>
             </div>
           </div>
         </article>`).join("") : `<div class="card empty">尚無公基金儲值紀錄。</div>`;
@@ -2626,12 +2658,16 @@
           return [name, shared, personal, total];
         })
         .sort((a, b) => b[3] - a[3])
-        .map(([name, shared, personal, total]) => `<div class="currency-row">
-          <div>
-            <div class="currency-name">${escapeHtml(name)}</div>
-            <div class="stats-member-breakdown">共同分攤 約 ${formatMoney(shared, "TWD")}・個人消費 約 ${formatMoney(personal, "TWD")}</div>
+        .map(([name, shared, personal, total]) => `<div class="stats-member-row">
+          <div class="stats-member-name">${escapeHtml(name)}</div>
+          <div class="stats-member-lines">
+            <div class="stats-member-line"><span>共同分攤</span><strong>約 ${formatMoney(shared, "TWD")}</strong></div>
+            <div class="stats-member-line"><span>個人消費</span><strong>約 ${formatMoney(personal, "TWD")}</strong></div>
           </div>
-          <div class="currency-value"><span class="stats-member-total-label">合計</span><br>約 ${formatMoney(total, "TWD")}</div>
+          <div class="stats-member-total">
+            <div class="stats-member-total-label">合計</div>
+            <div class="stats-member-total-value">約 ${formatMoney(total, "TWD")}</div>
+          </div>
         </div>`).join("");
 
       const sharedActive = state.statsCategoryMode !== "all";
@@ -2665,7 +2701,7 @@
           </div>
           <div class="trip-actions">
             ${current ? `<button class="mini-btn" type="button" data-nav="home">查看</button>` : `<button class="mini-btn" type="button" data-switch-trip="${trip.id}">切換查看</button>`}
-            <button class="mini-btn danger" type="button" data-delete-trip="${trip.id}">刪除旅程</button>
+            <button class="mini-btn danger icon-action-btn" type="button" data-delete-trip="${trip.id}" aria-label="刪除旅程" title="刪除旅程"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></button>
           </div>
         </article>`;
       }).join("") : `<div class="card empty">尚無旅程資料</div>`;
@@ -2823,8 +2859,8 @@
           <div class="manage-item">
             <div class="manage-name">${escapeHtml(name)}</div>
             <div class="manage-actions">
-              <button class="manage-btn" type="button" data-edit-member-index="${index}">修改</button>
-              <button class="manage-btn delete" type="button" data-delete-member-index="${index}">刪除</button>
+              <button class="manage-btn icon-action-btn" type="button" data-edit-member-index="${index}" aria-label="修改成員" title="修改成員"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></button>
+              <button class="manage-btn delete icon-action-btn" type="button" data-delete-member-index="${index}" aria-label="刪除成員" title="刪除成員"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></button>
             </div>
           </div>`).join("")
         : `<div class="empty-manage">尚未新增成員</div>`;
@@ -2836,8 +2872,8 @@
           <div class="manage-item">
             <div class="manage-name">${escapeHtml(name)}</div>
             <div class="manage-actions">
-              <button class="manage-btn" type="button" data-edit-category-index="${index}">修改</button>
-              <button class="manage-btn delete" type="button" data-delete-category-index="${index}">刪除</button>
+              <button class="manage-btn icon-action-btn" type="button" data-edit-category-index="${index}" aria-label="修改分類" title="修改分類"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></button>
+              <button class="manage-btn delete icon-action-btn" type="button" data-delete-category-index="${index}" aria-label="刪除分類" title="刪除分類"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></button>
             </div>
           </div>`).join("")
         : `<div class="empty-manage">尚未新增分類</div>`;
