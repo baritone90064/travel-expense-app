@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v16：個人消費指定歸屬成員、分類統計範圍切換、成員統計拆分 -->
+  <!-- iPhone 修正版 v17：儲存後返回帳務、分類原幣明細、首頁橫式固定版面 -->
 
   <style>
     :root {
@@ -388,9 +388,24 @@
     .trip-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
     #page-home .hero-meta { font-size: 15px; line-height: 1.5; }
     #page-home .metric-label { font-size: 14px; }
-    #page-home .metric-note { font-size: 13px; }
+    #page-home .metric-note { font-size: 12px; }
     #page-home .section-head p { font-size: 14px; line-height: 1.5; }
     #page-home .currency-code { font-size: 14px; line-height: 1.5; }
+    .home-reference-card {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center; gap: 14px; padding: 14px 15px;
+    }
+    .home-reference-copy { min-width: 0; }
+    .home-reference-copy .metric-label { margin-bottom: 5px; font-weight: 800; color: var(--text); }
+    .home-reference-copy .metric-note { margin: 0; white-space: normal; line-height: 1.45; }
+    .home-reference-card .metric-value {
+      min-width: 0; text-align: right; font-size: clamp(22px, 7vw, 30px);
+      white-space: nowrap;
+    }
+    @media (max-width: 640px) {
+      body.home-page-active { overflow: hidden; height: 100dvh; }
+      body.home-page-active #appShell { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+    }
     .fund-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .fund-actions button { min-width: 148px; }
     .manage-list { display: grid; gap: 8px; margin-bottom: 10px; }
@@ -529,11 +544,12 @@
           <div id="homeTripMeta" class="hero-meta"></div>
         </div>
 
-        <div class="card">
-          <div class="metric-label">參考台幣共同消費</div>
+        <div class="card home-reference-card">
+          <div class="home-reference-copy">
+            <div class="metric-label">參考台幣共同消費</div>
+            <div id="rateUpdatedAt" class="metric-note">匯率更新：尚未更新（僅供參考）</div>
+          </div>
           <div id="referenceTwd" class="metric-value">NT$0</div>
-          <div id="rateUpdatedAt" class="metric-note">匯率更新：(僅供參考)
-尚未更新</div>
         </div>
 
         <div class="card">
@@ -1560,6 +1576,7 @@
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       document.body.classList.remove("keyboard-open");
       state.activePage = page;
+      document.body.classList.toggle("home-page-active", page === "home");
       document.querySelectorAll(".page").forEach((el) => el.classList.toggle("active", el.id === `page-${page}`));
       document.querySelectorAll(".nav-btn").forEach((el) => el.classList.toggle("active", el.dataset.nav === page));
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -1612,15 +1629,15 @@
     }
 
     function formatRateUpdatedAt(value) {
-      if (!value) return "匯率更新：(僅供參考)\n尚未更新";
+      if (!value) return "匯率更新：尚未更新（僅供參考）";
       const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "匯率更新：(僅供參考)\n尚未更新";
+      if (Number.isNaN(date.getTime())) return "匯率更新：尚未更新（僅供參考）";
       const y = date.getFullYear();
       const m = date.getMonth() + 1;
       const d = date.getDate();
       const hh = String(date.getHours()).padStart(2, "0");
       const mm = String(date.getMinutes()).padStart(2, "0");
-      return `匯率更新：(僅供參考)\n${y}/${m}/${d} ${hh}:${mm}`;
+      return `匯率更新：${y}/${m}/${d} ${hh}:${mm}（僅供參考）`;
     }
 
     function renderHome() {
@@ -1946,7 +1963,6 @@
       };
 
       const id = $("expenseId").value;
-      const wasEditing = Boolean(id);
       const original = id ? state.expenses.find((item) => item.id === id) : null;
       if (data.payer === "FUND") {
         const totals = getCurrencyTotals();
@@ -1994,7 +2010,7 @@
           document.body.classList.remove("keyboard-open");
           prepareExpenseForm(true);
           button.textContent = "儲存";
-          if (wasEditing) navigate("records");
+          navigate("records");
         }, 320);
         if (navigator.onLine) processOfflineJobs();
       } catch (error) {
@@ -2394,7 +2410,7 @@
     }
 
     async function removeFund(id) {
-      if (!confirm("確定永久刪除這筆公基金儲值？系統不會保留刪除紀錄。")) return;
+      if (!confirm("確定永久刪除這筆公基金儲值?")) return;
       const offline = !navigator.onLine || !state.serverReachable;
       if (offline && !state.persistentCacheAvailable) {
         return toast("此瀏覽器無法建立可靠的離線暫存，請連線後再試");
@@ -2555,6 +2571,7 @@
     function renderStats() {
       if (!state.trip) return;
       const byCategory = {};
+      const byCategoryCurrency = {};
       const sharedByMember = {};
       const personalByMember = {};
       state.trip.members.forEach((member) => {
@@ -2567,6 +2584,9 @@
         const personal = isPersonalExpense(expense);
         if (state.statsCategoryMode === "all" || !personal) {
           byCategory[expense.category] = (byCategory[expense.category] || 0) + twd;
+          byCategoryCurrency[expense.category] ||= {};
+          byCategoryCurrency[expense.category][expense.currency] =
+            safeNumber(byCategoryCurrency[expense.category][expense.currency]) + safeNumber(expense.amount);
         }
 
         if (personal) {
@@ -2582,7 +2602,21 @@
 
       const categoryRows = Object.entries(byCategory)
         .sort((a, b) => b[1] - a[1])
-        .map(([name, value]) => `<div class="currency-row"><div class="currency-name">${escapeHtml(name)}</div><div class="currency-value">約 ${formatMoney(value, "TWD")}</div></div>`)
+        .map(([name, value]) => {
+          const amounts = byCategoryCurrency[name] || {};
+          const preferredOrder = [...state.trip.enabledCurrencies, ...Object.keys(amounts)];
+          const currencies = [...new Set(preferredOrder)].filter((currency) => safeNumber(amounts[currency]) !== 0);
+          const breakdown = currencies
+            .map((currency) => formatMoney(amounts[currency], currency))
+            .join("・");
+          return `<div class="currency-row">
+            <div>
+              <div class="currency-name">${escapeHtml(name)}</div>
+              <div class="stats-member-breakdown">${escapeHtml(breakdown || "無原幣資料")}</div>
+            </div>
+            <div class="currency-value"><span class="stats-member-total-label">參考台幣</span><br>約 ${formatMoney(value, "TWD")}</div>
+          </div>`;
+        })
         .join("");
       const memberRows = state.trip.members
         .map((name) => {
@@ -3304,6 +3338,7 @@
       state.user = user;
       if (!user) {
         state.authorized = false;
+        document.body.classList.remove("home-page-active");
         $("loginScreen").classList.remove("hidden");
         $("appShell").classList.add("hidden");
         return;
@@ -3320,6 +3355,7 @@
       state.authorized = true;
       $("loginScreen").classList.add("hidden");
       $("appShell").classList.remove("hidden");
+      navigate(state.activePage || "home");
       try {
         const settings = await ensureInitialData();
         state.settings = settings;
