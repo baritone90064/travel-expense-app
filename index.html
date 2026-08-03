@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v14：共同消費排除個人消費、成員統計保留個人消費、更多頁精簡 -->
+  <!-- iPhone 修正版 v15：記帳可指定共同／個人消費，個人消費排除共同總額與分類統計 -->
 
   <style>
     :root {
@@ -219,6 +219,11 @@
     }
     .record-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
     .record-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .record-type-tag {
+      display: inline-flex; align-items: center; min-height: 24px; margin-top: 6px;
+      padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
+      color: #7b5318; background: #fff4dc; border: 1px solid #ead09b;
+    }
     .record-amount { font-size: 17px; font-weight: 900; text-align: right; }
     .record-actions { margin-top: 7px; display: flex; gap: 6px; justify-content: flex-end; }
     .expense-record .record-actions { margin-top: auto; padding-top: 10px; }
@@ -575,6 +580,15 @@
           <div class="field">
             <label for="expenseCategory">消費分類</label>
             <select id="expenseCategory" required></select>
+          </div>
+
+          <div class="field">
+            <label>消費類型</label>
+            <input id="expenseIsPersonal" type="hidden" value="false" />
+            <div class="segmented" role="group" aria-label="消費類型">
+              <button id="expenseTypeShared" class="segment active" type="button" aria-pressed="true">共同消費</button>
+              <button id="expenseTypePersonal" class="segment" type="button" aria-pressed="false">個人消費</button>
+            </div>
           </div>
 
           <div class="field">
@@ -1839,10 +1853,21 @@
       const last = loadLastEntry();
       $("expenseCurrency").value = state.trip.enabledCurrencies.includes(last?.currency) ? last.currency : state.trip.primaryCurrency;
       $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
+      // 每一筆新記帳預設為共同消費，避免沿用上一筆個人消費造成誤記。
+      setExpenseType(false);
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
       renderShareMemberChips();
       renderReceiptPreview();
+    }
+
+    function setExpenseType(isPersonal) {
+      const personal = Boolean(isPersonal);
+      $("expenseIsPersonal").value = personal ? "true" : "false";
+      $("expenseTypeShared").classList.toggle("active", !personal);
+      $("expenseTypeShared").setAttribute("aria-pressed", String(!personal));
+      $("expenseTypePersonal").classList.toggle("active", personal);
+      $("expenseTypePersonal").setAttribute("aria-pressed", String(personal));
     }
 
     function renderShareMemberChips() {
@@ -1881,6 +1906,7 @@
         currency: $("expenseCurrency").value,
         payer: $("expensePayer").value,
         category: $("expenseCategory").value,
+        isPersonalExpense: $("expenseIsPersonal").value === "true",
         shareMemberIds,
         date: $("expenseDate").value,
         note: $("expenseNote").value.trim()
@@ -1960,6 +1986,7 @@
       $("expenseCurrency").value = expense.currency;
       $("expensePayer").value = expense.payer;
       $("expenseCategory").value = expense.category;
+      setExpenseType(isPersonalExpense(expense));
       $("expenseDate").value = expense.date;
       $("expenseNote").value = expense.note || "";
       state.selectedShareMembers = new Set(expense.shareMemberIds || []);
@@ -2018,7 +2045,10 @@
     }
 
     function isPersonalExpense(item) {
-      const shareMembers = uniqueTextList(item.shareMemberIds, state.trip?.members || []);
+      // v15 起以記帳時的明確選擇為準。舊資料沒有此欄位時，暫沿用舊版判斷，
+      // 使用者只要開啟該筆修改並儲存，就會寫入明確的 true／false。
+      if (typeof item?.isPersonalExpense === "boolean") return item.isPersonalExpense;
+      const shareMembers = uniqueTextList(item?.shareMemberIds, state.trip?.members || []);
       return item?.payer !== "FUND"
         && shareMembers.length === 1
         && shareMembers[0] === item?.payer;
@@ -2059,9 +2089,11 @@
 
     function renderRecordTotals(items) {
       const container = $("recordTotals");
-      const grossTotals = sumAmountsByCurrency(items, (item) => isPersonalExpense(item) ? 0 : item.amount);
       const selectedMember = state.filters.shareMember;
       const filtered = hasActiveRecordFilters();
+      // 未篩選時只顯示共同消費；套用篩選後則顯示篩選到的全部金額，
+      // 讓使用者能透過成員等條件查看個人消費。
+      const grossTotals = sumAmountsByCurrency(items, (item) => (!filtered && isPersonalExpense(item)) ? 0 : item.amount);
       const memberTotals = selectedMember
         ? sumAmountsByCurrency(items, (item) => getExpenseShareAmount(item, selectedMember))
         : null;
@@ -2102,6 +2134,7 @@
         <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
           <div class="record-meta">${escapeHtml(payer)}・分攤：${escapeHtml(shares)}</div>
+          ${isPersonalExpense(item) ? `<div class="record-type-tag">個人消費</div>` : ""}
           ${item._pendingSync ? `<div class="sync-note">等待同步</div>` : ""}
           ${safeNumber(item.pendingAttachmentCount) ? `<div class="sync-note">${safeNumber(item.pendingAttachmentCount)} 張收據等待上傳</div>` : ""}
           ${(item.attachments || []).length ? `<div class="record-receipts">${(item.attachments || []).map((attachment) => `<button class="record-receipt-thumb" type="button" data-view-attachment-path="${escapeHtml(attachment.storagePath || "")}" aria-label="查看收據圖片"><img data-storage-path="${escapeHtml(attachment.storagePath || "")}" alt="收據縮圖" /></button>`).join("")}</div>` : ""}
@@ -2916,6 +2949,7 @@
       const expenseRows = state.expenses.map((item) => ({
         日期: item.date,
         分類: item.category,
+        消費類型: isPersonalExpense(item) ? "個人消費" : "共同消費",
         幣別: item.currency,
         金額: item.amount,
         支付者: item.payer === "FUND" ? "公基金" : item.payer,
@@ -3094,6 +3128,8 @@
     $("googleLoginBtn").addEventListener("click", login);
     $("logoutBtn").addEventListener("click", () => signOut(auth));
     $("expenseForm").addEventListener("submit", saveExpense);
+    $("expenseTypeShared").addEventListener("click", () => setExpenseType(false));
+    $("expenseTypePersonal").addEventListener("click", () => setExpenseType(true));
     $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
     $("addReceiptBtn").addEventListener("click", () => $("receiptInput").click());
     $("receiptInput").addEventListener("change", (event) => handleReceiptSelection(event.target.files || []));
