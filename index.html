@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=7" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v19：成員統計灰字與間距微調 -->
+  <!-- iPhone 修正版 v21：Excel 欄位整併與統計分析匯出 -->
 
   <style>
     :root {
@@ -691,7 +691,7 @@
           <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div></button>
           <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
           <button class="more-tile" data-nav="trips"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16v11H4z"></path><path d="M8 7.5V5h8v2.5M4 12h16M9.5 12v2h5v-2"></path></svg></div><div class="more-title">旅程管理</div><div class="more-note">建立與查看過往旅程</div></button>
-          <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含結算資料</div></button>
+          <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含統計與結算資料</div></button>
         </div>
         <button id="logoutBtn" class="ghost-btn full" style="margin-top:16px">登出</button>
       </section>
@@ -3107,20 +3107,33 @@
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripRows), "旅行資料");
 
-      const expenseRows = state.expenses.map((item) => ({
-        日期: item.date,
-        分類: item.category,
-        消費類型: isPersonalExpense(item) ? "個人消費" : "共同消費",
-        消費歸屬: isPersonalExpense(item) ? getPersonalExpenseOwner(item) : "",
-        幣別: item.currency,
-        金額: item.amount,
-        支付者: item.payer === "FUND" ? "公基金" : item.payer,
-        分攤成員: (item.shareMemberIds || []).join("、"),
-        備註: item.note || "",
-        圖片數量: (item.attachments || []).length,
-        參考台幣: convertToTwd(item.amount, item.currency)
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows.length ? expenseRows : [{ 說明: "尚無消費資料" }]), "消費明細");
+      const expenseSheetRows = [
+        ["日期", "分類", "備註", "消費類型", "分攤／歸屬成員", "幣別", "金額", "參考台幣", "支付者"],
+        ...state.expenses.map((item) => {
+          const personal = isPersonalExpense(item);
+          const allocationMembers = personal
+            ? getPersonalExpenseOwner(item)
+            : uniqueTextList(item.shareMemberIds, state.trip.members).join("、");
+          return [
+            item.date,
+            item.category,
+            item.note || "",
+            personal ? "個人消費" : "共同消費",
+            allocationMembers,
+            item.currency,
+            safeNumber(item.amount),
+            convertToTwd(item.amount, item.currency),
+            item.payer === "FUND" ? "公基金" : (item.payer || "")
+          ];
+        })
+      ];
+      if (!state.expenses.length) expenseSheetRows.push(["尚無消費資料"]);
+      const expenseSheet = XLSX.utils.aoa_to_sheet(expenseSheetRows);
+      expenseSheet["!cols"] = [
+        { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
+        { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }
+      ];
+      XLSX.utils.book_append_sheet(wb, expenseSheet, "消費明細");
 
       const fundRows = state.funds.map((item) => [
         item.date,
@@ -3146,6 +3159,81 @@
         ...(fundRows.length ? fundRows : [["尚無公基金資料"]])
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fundSheetRows), "公基金");
+
+      const statsCurrencies = [...new Set([
+        ...(state.trip.enabledCurrencies || []),
+        ...state.expenses.map((item) => item.currency)
+      ])].filter(Boolean);
+
+      function buildCategoryStats(includePersonal) {
+        const totals = {};
+        state.expenses.forEach((item) => {
+          if (!includePersonal && isPersonalExpense(item)) return;
+          totals[item.category] ||= { twd: 0, currencies: {} };
+          totals[item.category].twd += convertToTwd(item.amount, item.currency);
+          totals[item.category].currencies[item.currency] =
+            safeNumber(totals[item.category].currencies[item.currency]) + safeNumber(item.amount);
+        });
+        return Object.entries(totals)
+          .map(([category, values]) => ({ category, ...values }))
+          .sort((a, b) => b.twd - a.twd);
+      }
+
+      const sharedByMember = Object.fromEntries(state.trip.members.map((member) => [member, 0]));
+      const personalByMember = Object.fromEntries(state.trip.members.map((member) => [member, 0]));
+      state.expenses.forEach((item) => {
+        const twd = convertToTwd(item.amount, item.currency);
+        if (isPersonalExpense(item)) {
+          const owner = getPersonalExpenseOwner(item);
+          if (owner) personalByMember[owner] = safeNumber(personalByMember[owner]) + twd;
+          return;
+        }
+        const members = uniqueTextList(item.shareMemberIds, state.trip.members)
+          .filter((member) => state.trip.members.includes(member));
+        if (!members.length) return;
+        const each = twd / members.length;
+        members.forEach((member) => {
+          sharedByMember[member] = safeNumber(sharedByMember[member]) + each;
+        });
+      });
+
+      const statsRows = [];
+      const appendCategorySection = (title, rows) => {
+        statsRows.push([title]);
+        statsRows.push(["分類", ...statsCurrencies, "參考台幣"]);
+        if (rows.length) {
+          rows.forEach((row) => {
+            statsRows.push([
+              row.category,
+              ...statsCurrencies.map((currency) => safeNumber(row.currencies[currency])),
+              row.twd
+            ]);
+          });
+        } else {
+          statsRows.push(["尚無資料"]);
+        }
+        statsRows.push([]);
+      };
+
+      appendCategorySection("依分類－僅共同消費", buildCategoryStats(false));
+      appendCategorySection("依分類－包含個人消費", buildCategoryStats(true));
+      statsRows.push(["依成員消費"]);
+      statsRows.push(["成員", "共同分攤（參考台幣）", "個人消費（參考台幣）", "合計（參考台幣）"]);
+      const memberStatsRows = state.trip.members
+        .map((member) => {
+          const shared = safeNumber(sharedByMember[member]);
+          const personal = safeNumber(personalByMember[member]);
+          return [member, shared, personal, shared + personal];
+        })
+        .sort((a, b) => b[3] - a[3]);
+      statsRows.push(...(memberStatsRows.length ? memberStatsRows : [["尚無資料"]]));
+
+      const statsSheet = XLSX.utils.aoa_to_sheet(statsRows);
+      statsSheet["!cols"] = [
+        { wch: 22 },
+        ...Array.from({ length: Math.max(statsCurrencies.length, 3) }, () => ({ wch: 18 }))
+      ];
+      XLSX.utils.book_append_sheet(wb, statsSheet, "統計分析");
 
       const settlementRows = [];
       Object.entries(settlement).forEach(([currency, section]) => {
