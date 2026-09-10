@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v24：新增信用卡帳單實際台幣、凍結記帳匯率與預估台幣 -->
+  <!-- iPhone 修正版 v27：帳單幣別限 TWD/USD、Excel/PDF 共同與個人消費分開 -->
 
   <style>
     :root {
@@ -189,6 +189,7 @@
       margin-top: 9px; padding: 11px 12px; border: 1px solid #e5dfd1; border-radius: 14px; background: #fffaf0;
     }
     .card-billing-box label { margin-bottom: 6px; }
+    .card-billing-grid { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 9px; }
     .card-billing-status { margin-top: 6px; color: var(--warning); font-size: 11px; font-weight: 760; line-height: 1.4; }
     .record-twd { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 720; text-align: right; white-space: nowrap; }
     .record-twd.actual { color: var(--primary-dark); font-weight: 820; }
@@ -232,6 +233,12 @@
     }
     .record-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
     .record-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .record-meta-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .record-payment-icon {
+      width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center;
+      color: var(--muted);
+    }
+    .record-payment-icon svg { width: 17px; height: 17px; display: block; }
     .record-type-tag {
       display: inline-flex; align-items: center; min-height: 24px; margin-top: 6px;
       padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
@@ -646,9 +653,11 @@
               <button id="paymentMethodCard" class="segment" type="button" aria-pressed="false">信用卡</button>
             </div>
             <div id="creditCardBillingBox" class="card-billing-box hidden">
-              <label for="expenseActualTwd">信用卡帳單實際台幣金額</label>
-              <input id="expenseActualTwd" type="number" inputmode="decimal" min="0" step="1" placeholder="尚未入帳可先留空" />
-              <div class="hint">正式入帳後再填，只記帳單上的消費金額，不含海外手續費與信用卡回饋。</div>
+              <label for="expenseActualBillAmount">信用卡帳單實際金額</label>
+              <div class="card-billing-grid">
+                <select id="expenseBillCurrency" aria-label="帳單幣別"></select>
+                <input id="expenseActualBillAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="尚未入帳可先留空" />
+              </div>
               <div id="creditCardBillingStatus" class="card-billing-status"></div>
             </div>
           </div>
@@ -695,9 +704,9 @@
       </section>
 
       <section id="page-settlement" class="page">
-        <div class="section-head"><div><h2>旅程結算</h2><p>每種幣別獨立計算，不用匯率互相抵銷</p></div></div>
+        <div class="section-head"><div><h2>旅程結算</h2><p>依實際付款幣別獨立計算，不用匯率互相抵銷</p></div></div>
         <div class="card soft">
-          <div class="hint" style="margin:0 0 10px">結算會先使用該幣別的公基金餘額返還應收者，再安排成員間付款。</div>
+          <div class="hint" style="margin:0 0 10px">信用卡待確認時先以原始消費幣別結算；補填實際帳單後改以帳單幣別與實際金額結算。</div>
           <button id="calculateSettlementBtn" class="primary-btn full">重新計算結算</button>
         </div>
         <div id="settlementContent"></div>
@@ -710,7 +719,8 @@
           <button class="more-tile" data-nav="stats"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V11M12 19V5M19 19v-7"></path><path d="M3.5 19.5h17"></path></svg></div><div class="more-title">統計分析</div></button>
           <button class="more-tile" data-nav="settings"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.3 3h-4.6L9.3 6A7 7 0 0 0 7.6 7L5.1 6 3 9.4 5.1 11A7 7 0 0 0 5 12c0 .3 0 .7.1 1L3 14.6 5 18l2.6-1A7 7 0 0 0 9.3 18l.4 3h4.6l.4-3a7 7 0 0 0 1.7-1l2.5 1 2.1-3.4-2.1-1.6c.1-.3.1-.7.1-1Z"></path></svg></div><div class="more-title">旅程設定</div><div class="more-note">成員、幣別與分類</div></button>
           <button class="more-tile" data-nav="trips"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16v11H4z"></path><path d="M8 7.5V5h8v2.5M4 12h16M9.5 12v2h5v-2"></path></svg></div><div class="more-title">旅程管理</div><div class="more-note">建立與查看過往旅程</div></button>
-          <button id="exportBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出帳務</div><div class="more-note">Excel 含統計與結算資料</div></button>
+          <button id="exportExcelBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 8l4-4 4 4"></path><path d="M5 13v6h14v-6"></path></svg></div><div class="more-title">匯出 Excel</div><div class="more-note">明細、統計與結算</div></button>
+          <button id="exportPdfBtn" class="more-tile"><div class="more-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v5h5"></path><path d="M8.5 15h7M8.5 18h5"></path></svg></div><div class="more-title">匯出 PDF</div><div class="more-note">帳務報告含收據圖片</div></button>
         </div>
         <button id="logoutBtn" class="ghost-btn full" style="margin-top:16px">登出</button>
       </section>
@@ -874,6 +884,8 @@
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
     let xlsxModulePromise = null;
+    let html2PdfPromise = null;
+
     async function getXlsxModule() {
       if (!xlsxModulePromise) {
         xlsxModulePromise = import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs")
@@ -883,6 +895,24 @@
           });
       }
       return xlsxModulePromise;
+    }
+
+    function getHtml2PdfModule() {
+      if (window.html2pdf) return Promise.resolve(window.html2pdf);
+      if (!html2PdfPromise) {
+        html2PdfPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js";
+          script.async = true;
+          script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error("PDF 元件載入失敗"));
+          script.onerror = () => reject(new Error("PDF 元件載入失敗"));
+          document.head.appendChild(script);
+        }).catch((error) => {
+          html2PdfPromise = null;
+          throw error;
+        });
+      }
+      return html2PdfPromise;
     }
 
     // 幣別清單保留在主程式作為保底；即使舊版 firebase-config.js 沒有此欄位，畫面仍會正常顯示。
@@ -903,6 +933,8 @@
 
     const ICON_EDIT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg>`;
     const ICON_DELETE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>`;
+    const ICON_CASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M7 9h.01M17 15h.01"></path></svg>`;
+    const ICON_CARD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 9h18"></path><path d="M7 15h4"></path></svg>`;
 
     function saveLocalTripState(tripId, tripData = null) {
       if (tripId) localStorage.setItem(CURRENT_TRIP_KEY, tripId);
@@ -1306,7 +1338,7 @@
         el.disabled = false;
       });
 
-      ["openFilterBtn", "exportBtn", "logoutBtn"].forEach((id) => {
+      ["openFilterBtn", "exportExcelBtn", "exportPdfBtn", "logoutBtn"].forEach((id) => {
         if ($(id)) $(id).disabled = false;
       });
       if ($("paymentMethodCard")) updatePaymentMethodUi();
@@ -1344,6 +1376,7 @@
         currency: expense.currency,
         payer: expense.payer,
         paymentMethod: expense.paymentMethod === "card" ? "card" : "cash",
+        billCurrency: expense.billCurrency || "TWD",
         shareMemberIds: expense.shareMemberIds
       }));
     }
@@ -1652,19 +1685,56 @@
       return item?.paymentMethod === "card";
     }
 
-    function hasActualCardTwd(item) {
-      if (!isCreditCardExpense(item) || item?.currency === "TWD") return false;
-      return safeNumber(item.actualTwdAmount) > 0;
+    function getActualBillCurrency(item) {
+      if (!isCreditCardExpense(item)) return "";
+      if (item?.billCurrency && CURRENCIES[item.billCurrency]) return item.billCurrency;
+      // v24/v25 舊資料只有 actualTwdAmount 時，視為 TWD 帳單。
+      if (safeNumber(item?.actualTwdAmount) > 0) return "TWD";
+      return "";
+    }
+
+    function getActualBillAmount(item) {
+      if (!isCreditCardExpense(item)) return 0;
+      const amount = safeNumber(item?.actualBillAmount);
+      if (amount > 0) return amount;
+      return safeNumber(item?.actualTwdAmount);
+    }
+
+    function hasActualCardBill(item) {
+      return isCreditCardExpense(item) && Boolean(getActualBillCurrency(item)) && getActualBillAmount(item) > 0;
     }
 
     function isCardBillPending(item) {
-      return isCreditCardExpense(item) && item?.currency !== "TWD" && !hasActualCardTwd(item);
+      return isCreditCardExpense(item) && !hasActualCardBill(item);
+    }
+
+    function getExpenseSettlementCurrency(item) {
+      return hasActualCardBill(item) ? getActualBillCurrency(item) : item?.currency;
+    }
+
+    function getExpenseSettlementAmount(item) {
+      return hasActualCardBill(item) ? getActualBillAmount(item) : safeNumber(item?.amount);
+    }
+
+    function getActualBillTwdEquivalent(item) {
+      if (!hasActualCardBill(item)) return 0;
+      const currency = getActualBillCurrency(item);
+      const amount = getActualBillAmount(item);
+      if (currency === "TWD") return amount;
+      const frozen = safeNumber(item?.actualBillTwdAmount);
+      if (frozen > 0) return frozen;
+      const rate = safeNumber(item?.actualBillExchangeRateSnapshot) || getCurrentExchangeRate(currency);
+      return estimateTwdByRate(amount, currency, rate);
     }
 
     function getExpenseTwdForStats(item) {
       if (!item) return 0;
+      if (hasActualCardBill(item)) {
+        const actualTwd = getActualBillTwdEquivalent(item);
+        if (actualTwd > 0) return actualTwd;
+      }
       if (item.currency === "TWD") return safeNumber(item.amount);
-      return hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : getExpenseEstimatedTwd(item);
+      return getExpenseEstimatedTwd(item);
     }
 
     function updateExpenseTwdPreview() {
@@ -1694,9 +1764,21 @@
       updatePaymentMethodUi();
     }
 
+    function renderBillCurrencyOptions(preferred = "") {
+      const select = $("expenseBillCurrency");
+      if (!select) return;
+      const billCurrencies = ["TWD", "USD"];
+      const current = billCurrencies.includes(preferred)
+        ? preferred
+        : (billCurrencies.includes(select.value) ? select.value : "TWD");
+      select.innerHTML = billCurrencies
+        .map((code) => `<option value="${code}">${code}｜${escapeHtml(CURRENCIES[code]?.name || code)}</option>`)
+        .join("");
+      select.value = current;
+    }
+
     function updatePaymentMethodUi() {
       const payer = $("expensePayer")?.value;
-      const currency = $("expenseCurrency")?.value;
       const cardButton = $("paymentMethodCard");
       const box = $("creditCardBillingBox");
       if (!cardButton || !box) return;
@@ -1709,17 +1791,21 @@
         $("paymentMethodCash").setAttribute("aria-pressed", "true");
         cardButton.classList.remove("active");
         cardButton.setAttribute("aria-pressed", "false");
-        $("expenseActualTwd").value = "";
+        $("expenseActualBillAmount").value = "";
       }
 
-      const foreignCard = $("expensePaymentMethod").value === "card" && currency && currency !== "TWD" && !fundPaid;
-      box.classList.toggle("hidden", !foreignCard);
-      if (!foreignCard) {
+      const cardPaid = $("expensePaymentMethod").value === "card" && !fundPaid;
+      box.classList.toggle("hidden", !cardPaid);
+      if (!cardPaid) {
         $("creditCardBillingStatus").textContent = "";
         return;
       }
-      const actual = safeNumber($("expenseActualTwd").value);
-      $("creditCardBillingStatus").textContent = actual > 0 ? "已填入實際帳單金額" : "待信用卡正式入帳後補填";
+      if (!$("expenseBillCurrency").options.length) renderBillCurrencyOptions("TWD");
+      const actual = safeNumber($("expenseActualBillAmount").value);
+      const billCurrency = $("expenseBillCurrency").value || "TWD";
+      $("creditCardBillingStatus").textContent = actual > 0
+        ? `已填入實際帳單：${formatMoney(actual, billCurrency)}`
+        : "待確認｜結算暫以原始消費幣別與金額計算";
     }
 
     function navigate(page) {
@@ -2001,7 +2087,8 @@
       const last = loadLastEntry();
       $("expenseCurrency").value = state.trip.enabledCurrencies.includes(last?.currency) ? last.currency : state.trip.primaryCurrency;
       $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
-      $("expenseActualTwd").value = "";
+      renderBillCurrencyOptions(["TWD", "USD"].includes(last?.billCurrency) ? last.billCurrency : "TWD");
+      $("expenseActualBillAmount").value = "";
       setPaymentMethod($("expensePayer").value === "FUND" ? "cash" : (last?.paymentMethod === "card" ? "card" : "cash"));
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
@@ -2083,8 +2170,11 @@
       const currency = $("expenseCurrency").value;
       const payer = $("expensePayer").value;
       const paymentMethod = payer === "FUND" ? "cash" : ($("expensePaymentMethod").value === "card" ? "card" : "cash");
-      const actualInput = safeNumber($("expenseActualTwd").value);
-      const actualTwdAmount = paymentMethod === "card" && currency !== "TWD" && actualInput > 0 ? actualInput : null;
+      const billCurrency = paymentMethod === "card" && ["TWD", "USD"].includes($("expenseBillCurrency").value)
+        ? $("expenseBillCurrency").value
+        : null;
+      const actualInput = safeNumber($("expenseActualBillAmount").value);
+      const actualBillAmount = paymentMethod === "card" && actualInput > 0 ? actualInput : null;
       const sameBaseAmount = original && original.currency === currency && Math.abs(safeNumber(original.amount) - amount) < 0.000001;
       let exchangeRateSnapshot = sameBaseAmount ? safeNumber(original.exchangeRateSnapshot) : 0;
       let estimatedTwdAmount = sameBaseAmount ? safeNumber(original.estimatedTwdAmount) : 0;
@@ -2095,8 +2185,28 @@
         exchangeRateSnapshot = getCurrentExchangeRate(currency);
         estimatedTwdAmount = estimateTwdByRate(amount, currency, exchangeRateSnapshot);
       }
-      const previousActual = safeNumber(original?.actualTwdAmount);
-      const actualChanged = Math.abs(previousActual - safeNumber(actualTwdAmount)) > 0.000001;
+      const previousBillCurrency = getActualBillCurrency(original);
+      const previousBillAmount = getActualBillAmount(original);
+      const actualChanged = previousBillCurrency !== (actualBillAmount ? billCurrency : "") ||
+        Math.abs(previousBillAmount - safeNumber(actualBillAmount)) > 0.000001;
+
+      let actualBillExchangeRateSnapshot = 0;
+      let actualBillTwdAmount = 0;
+      let actualBillRateCapturedAt = null;
+      if (actualBillAmount && billCurrency) {
+        const preserveActualSnapshot = !actualChanged && original;
+        actualBillExchangeRateSnapshot = preserveActualSnapshot
+          ? safeNumber(original.actualBillExchangeRateSnapshot)
+          : (billCurrency === "TWD" ? 1 : getCurrentExchangeRate(billCurrency));
+        actualBillTwdAmount = preserveActualSnapshot
+          ? safeNumber(original.actualBillTwdAmount)
+          : (billCurrency === "TWD"
+            ? actualBillAmount
+            : estimateTwdByRate(actualBillAmount, billCurrency, actualBillExchangeRateSnapshot));
+        actualBillRateCapturedAt = preserveActualSnapshot && original?.actualBillRateCapturedAt
+          ? original.actualBillRateCapturedAt
+          : (state.settings?.exchangeRateUpdatedAt || new Date().toISOString());
+      }
 
       const data = {
         amount,
@@ -2108,8 +2218,17 @@
         exchangeRateCapturedAt: sameBaseAmount && original?.exchangeRateCapturedAt
           ? original.exchangeRateCapturedAt
           : (state.settings?.exchangeRateUpdatedAt || new Date().toISOString()),
-        actualTwdAmount,
-        actualTwdUpdatedAt: actualTwdAmount
+        billCurrency: ["TWD", "USD"].includes($("expenseBillCurrency").value) ? $("expenseBillCurrency").value : "TWD",
+        actualBillAmount,
+        actualBillExchangeRateSnapshot: actualBillAmount ? (actualBillExchangeRateSnapshot || null) : null,
+        actualBillTwdAmount: actualBillAmount ? (actualBillTwdAmount || null) : null,
+        actualBillRateCapturedAt: actualBillAmount ? actualBillRateCapturedAt : null,
+        actualBillUpdatedAt: actualBillAmount
+          ? (actualChanged ? new Date().toISOString() : (original?.actualBillUpdatedAt || original?.actualTwdUpdatedAt || new Date().toISOString()))
+          : null,
+        // 保留舊欄位相容性：只有 TWD 帳單才同步寫入 actualTwdAmount。
+        actualTwdAmount: actualBillAmount && billCurrency === "TWD" ? actualBillAmount : null,
+        actualTwdUpdatedAt: actualBillAmount && billCurrency === "TWD"
           ? (actualChanged ? new Date().toISOString() : (original?.actualTwdUpdatedAt || new Date().toISOString()))
           : null,
         category: $("expenseCategory").value,
@@ -2189,7 +2308,8 @@
       $("expenseAmount").value = expense.amount;
       $("expenseCurrency").value = expense.currency;
       $("expensePayer").value = expense.payer;
-      $("expenseActualTwd").value = safeNumber(expense.actualTwdAmount) > 0 ? safeNumber(expense.actualTwdAmount) : "";
+      renderBillCurrencyOptions(getActualBillCurrency(expense) || expense.billCurrency || "TWD");
+      $("expenseActualBillAmount").value = getActualBillAmount(expense) > 0 ? getActualBillAmount(expense) : "";
       setPaymentMethod(expense.payer === "FUND" ? "cash" : (expense.paymentMethod === "card" ? "card" : "cash"));
       $("expenseCategory").value = expense.category;
       $("expenseDate").value = expense.date;
@@ -2237,7 +2357,7 @@
         if (f.currency && item.currency !== f.currency) return false;
         if (f.payer && item.payer !== f.payer) return false;
         if (f.cardStatus === "pending" && !isCardBillPending(item)) return false;
-        if (f.cardStatus === "confirmed" && !(isCreditCardExpense(item) && (item.currency === "TWD" || hasActualCardTwd(item)))) return false;
+        if (f.cardStatus === "confirmed" && !(isCreditCardExpense(item) && hasActualCardBill(item))) return false;
         if (f.shareMember) {
           if (isPersonalExpense(item)) {
             if (getPersonalExpenseOwner(item) !== f.shareMember) return false;
@@ -2400,18 +2520,22 @@
       const selectedMember = state.filters.shareMember;
       const selectedMemberShare = getExpenseShareAmount(item, selectedMember);
       const estimatedTwd = getExpenseEstimatedTwd(item);
-      const actualTwd = hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : 0;
-      const twdLine = item.currency === "TWD"
-        ? ""
-        : actualTwd > 0
-          ? `<div class="record-twd actual">實際 ${formatMoney(actualTwd, "TWD")}</div>`
+      const billCurrency = getActualBillCurrency(item);
+      const actualBillAmount = getActualBillAmount(item);
+      const billLine = hasActualCardBill(item)
+        ? `<div class="record-twd actual">帳單 ${formatMoney(actualBillAmount, billCurrency)}</div>`
+        : item.currency === "TWD"
+          ? ""
           : estimatedTwd > 0
             ? `<div class="record-twd">約 ${formatMoney(estimatedTwd, "TWD")}</div>`
             : `<div class="record-twd">暫無台幣估算</div>`;
       return `<article class="record expense-record">
         <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
-          <div class="record-meta">${escapeHtml(payer)}・${escapeHtml(allocationText)}</div>
+          <div class="record-meta-row">
+            <span class="record-payment-icon" aria-label="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}" title="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}">${isCreditCardExpense(item) ? ICON_CARD : ICON_CASH}</span>
+            <div class="record-meta">${escapeHtml(payer)}・${escapeHtml(allocationText)}</div>
+          </div>
           ${personal ? `<div class="record-type-tag">個人消費</div>` : ""}
           ${item._pendingSync ? `<div class="sync-note">等待同步</div>` : ""}
           ${safeNumber(item.pendingAttachmentCount) ? `<div class="sync-note">${safeNumber(item.pendingAttachmentCount)} 張收據等待上傳</div>` : ""}
@@ -2419,7 +2543,7 @@
         </div>
         <div class="record-side">
           <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
-          ${twdLine}
+          ${billLine}
           ${isCardBillPending(item) ? `<div class="record-card-status">信用卡待確認</div>` : ""}
           ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} ${personal ? "個人消費" : "分攤"}：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           <div class="record-actions">
@@ -2681,7 +2805,11 @@
     function calculateSettlementData() {
       const result = {};
       const members = state.trip.members;
-      const currencies = [...new Set([...state.trip.enabledCurrencies, ...state.expenses.map((x) => x.currency), ...state.funds.map((x) => x.currency)])];
+      const currencies = [...new Set([
+        ...state.trip.enabledCurrencies,
+        ...state.funds.map((x) => x.currency),
+        ...state.expenses.map((x) => getExpenseSettlementCurrency(x))
+      ].filter(Boolean))];
 
       currencies.forEach((currency) => {
         const people = Object.fromEntries(members.map((member) => [member, {
@@ -2703,10 +2831,14 @@
           });
         });
 
-        state.expenses.filter((item) => item.currency === currency).forEach((expense) => {
-          if (expense.payer !== "FUND" && people[expense.payer]) people[expense.payer].personalPaid += safeNumber(expense.amount);
+        const currencyExpenses = state.expenses.filter((item) => getExpenseSettlementCurrency(item) === currency);
+        currencyExpenses.forEach((expense) => {
+          const settlementAmount = getExpenseSettlementAmount(expense);
+          if (expense.payer !== "FUND" && people[expense.payer]) {
+            people[expense.payer].personalPaid += settlementAmount;
+          }
           const shareMembers = (expense.shareMemberIds || []).filter((member) => people[member]);
-          const eachShare = shareMembers.length ? safeNumber(expense.amount) / shareMembers.length : 0;
+          const eachShare = shareMembers.length ? settlementAmount / shareMembers.length : 0;
           shareMembers.forEach((member) => people[member].share += eachShare);
         });
 
@@ -2715,7 +2847,9 @@
         });
 
         const totalFund = currencyFunds.reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
-        const fundSpent = state.expenses.filter((item) => item.currency === currency && item.payer === "FUND").reduce((sum, item) => sum + safeNumber(item.amount), 0);
+        const fundSpent = currencyExpenses
+          .filter((item) => item.payer === "FUND")
+          .reduce((sum, item) => sum + getExpenseSettlementAmount(item), 0);
         let fundBalance = totalFund - fundSpent;
         const payments = [];
 
@@ -2747,11 +2881,16 @@
           creditors[c].amount -= paid;
         }
 
+        const pendingCardCount = state.expenses.filter((item) =>
+          isCardBillPending(item) && item.currency === currency
+        ).length;
+
         result[currency] = {
           people: Object.values(people),
           totalFund,
           fundSpent,
           fundBalanceOriginal: totalFund - fundSpent,
+          pendingCardCount,
           payments
         };
       });
@@ -2772,7 +2911,7 @@
     }
 
     function renderSettlement() {
-      const data = state.settlement?.results || calculateSettlementData();
+      const data = calculateSettlementData();
       if (!state.trip) return;
       const html = Object.entries(data).map(([currency, section]) => {
         const peopleRows = section.people.map((person) => {
@@ -2783,7 +2922,7 @@
           const fromLabel = payment.from === "公基金" ? "公基金返還" : payment.from;
           return `<div class="settlement-item"><div class="settlement-title">${escapeHtml(fromLabel)} → ${escapeHtml(payment.to)}：${formatMoney(payment.amount, currency)}</div></div>`;
         }).join("") : `<div class="empty">不需要額外付款。</div>`;
-        return `<div class="card"><h3>${currency} 結算</h3><div class="hint">公基金原始餘額：${formatMoney(section.fundBalanceOriginal, currency)}</div>${peopleRows}<h3 style="margin-top:16px">付款建議</h3>${payments}</div>`;
+        return `<div class="card"><h3>${currency} 結算</h3><div class="hint">公基金原始餘額：${formatMoney(section.fundBalanceOriginal, currency)}${section.pendingCardCount ? `・${section.pendingCardCount} 筆信用卡待確認，暫以原幣結算` : ""}</div>${peopleRows}<h3 style="margin-top:16px">付款建議</h3>${payments}</div>`;
       }).join("");
       $("settlementContent").innerHTML = html || `<div class="card empty">尚無可結算資料。</div>`;
     }
@@ -3232,6 +3371,229 @@
       navigate("home");
     }
 
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("圖片讀取失敗"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function getAttachmentDataUrl(path) {
+      if (!path) return "";
+      const url = await resolveAttachmentUrl(path);
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`圖片下載失敗 HTTP ${response.status}`);
+      return blobToDataUrl(await response.blob());
+    }
+
+    function pdfMoneyLine(item) {
+      if (hasActualCardBill(item)) {
+        const currency = getActualBillCurrency(item);
+        return `帳單實際 ${formatMoney(getActualBillAmount(item), currency)}`;
+      }
+      if (item.currency === "TWD") return "";
+      const estimated = getExpenseEstimatedTwd(item);
+      return estimated > 0 ? `預估折合 約 ${formatMoney(estimated, "TWD")}` : "預估折合：暫無匯率";
+    }
+
+    async function buildPdfReportElement() {
+      const report = document.createElement("div");
+      report.style.cssText = [
+        "width:760px",
+        "padding:28px",
+        "background:#fff",
+        "color:#1e2823",
+        "font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC',sans-serif",
+        "font-size:13px",
+        "line-height:1.55"
+      ].join(";");
+
+      const settlement = calculateSettlementData();
+      const categoryStats = buildCategoryStats(false);
+      const memberStats = buildMemberStats();
+      const sharedTwd = state.expenses.reduce((sum, item) =>
+        sum + (isPersonalExpense(item) ? 0 : getExpenseTwdForStats(item)), 0);
+      const personalTwd = state.expenses.reduce((sum, item) =>
+        sum + (isPersonalExpense(item) ? getExpenseTwdForStats(item) : 0), 0);
+
+      const memberHtml = memberStats.map((row) => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(row.member)}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${formatMoney(row.shared,"TWD")}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${formatMoney(row.personal,"TWD")}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${formatMoney(row.total,"TWD")}</td>
+        </tr>`).join("");
+
+      const categoryHtml = categoryStats.map((row) => {
+        const breakdown = Object.entries(row.currencies)
+          .filter(([, amount]) => safeNumber(amount) !== 0)
+          .map(([currency, amount]) => formatMoney(amount, currency))
+          .join("・");
+        return `<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(row.category)}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(breakdown || "—")}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${formatMoney(row.twd,"TWD")}</td>
+        </tr>`;
+      }).join("");
+
+      const settlementHtml = Object.entries(settlement).map(([currency, section]) => {
+        const paymentRows = section.payments.length
+          ? section.payments.map((payment) => `<div style="padding:4px 0">${escapeHtml(payment.from === "公基金" ? "公基金返還" : payment.from)} → ${escapeHtml(payment.to)}：<strong>${formatMoney(payment.amount, currency)}</strong></div>`).join("")
+          : `<div style="color:#778078">不需要額外付款</div>`;
+        return `<div style="margin:8px 0 14px;break-inside:avoid">
+          <div style="font-weight:800;margin-bottom:4px">${escapeHtml(currency)} 結算</div>
+          ${section.pendingCardCount ? `<div style="font-size:11px;color:#a46b18;margin-bottom:4px">${section.pendingCardCount} 筆信用卡待確認，暫以原幣計算</div>` : ""}
+          ${paymentRows}
+        </div>`;
+      }).join("");
+
+      report.innerHTML = `
+        <div style="border-bottom:2px solid #6f7f3a;padding-bottom:12px;margin-bottom:18px">
+          <div style="font-size:24px;font-weight:900">${escapeHtml(state.trip.name || "旅行記帳")}</div>
+          <div style="color:#778078;margin-top:4px">${escapeHtml([state.trip.startDate,state.trip.endDate].filter(Boolean).join(" ～ "))}｜${escapeHtml(state.trip.members.join("、"))}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:18px">
+          <div style="flex:1;padding:12px;border:1px solid #e7e2d6;border-radius:12px"><div style="color:#778078;font-size:11px">共同消費（參考台幣）</div><div style="font-size:20px;font-weight:800">${formatMoney(sharedTwd,"TWD")}</div></div>
+          <div style="flex:1;padding:12px;border:1px solid #e7e2d6;border-radius:12px"><div style="color:#778078;font-size:11px">個人消費（參考台幣）</div><div style="font-size:20px;font-weight:800">${formatMoney(personalTwd,"TWD")}</div></div>
+        </div>
+        <h2 style="font-size:17px;margin:18px 0 8px">依成員</h2>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+          <thead><tr><th style="text-align:left;padding:6px 8px;background:#f7f3e8">成員</th><th style="text-align:right;padding:6px 8px;background:#f7f3e8">共同分攤</th><th style="text-align:right;padding:6px 8px;background:#f7f3e8">個人消費</th><th style="text-align:right;padding:6px 8px;background:#f7f3e8">合計</th></tr></thead>
+          <tbody>${memberHtml || `<tr><td>尚無資料</td></tr>`}</tbody>
+        </table>
+        <h2 style="font-size:17px;margin:18px 0 8px">依分類－僅共同消費</h2>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+          <thead><tr><th style="text-align:left;padding:6px 8px;background:#f7f3e8">分類</th><th style="text-align:left;padding:6px 8px;background:#f7f3e8">各幣別</th><th style="text-align:right;padding:6px 8px;background:#f7f3e8">參考台幣</th></tr></thead>
+          <tbody>${categoryHtml || `<tr><td>尚無資料</td></tr>`}</tbody>
+        </table>
+        <h2 style="font-size:17px;margin:18px 0 8px">旅程結算</h2>
+        ${settlementHtml || `<div style="color:#778078">尚無結算資料</div>`}
+        <div style="break-before:page;margin-top:22px"><h2 style="font-size:19px;margin:0 0 12px">帳務明細與收據</h2></div>
+      `;
+
+      const expenses = [...state.expenses].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")));
+
+      async function appendPdfExpenseGroup(title, items, startOnNewPage = false) {
+        const heading = document.createElement("div");
+        heading.style.cssText = `${startOnNewPage ? "break-before:page;" : ""}margin:10px 0 12px`;
+        heading.innerHTML = `<h2 style="font-size:17px;margin:0">${escapeHtml(title)}</h2>`;
+        report.appendChild(heading);
+
+        if (!items.length) {
+          const empty = document.createElement("div");
+          empty.style.cssText = "padding:12px;border:1px solid #e7e2d6;border-radius:12px;color:#778078;margin-bottom:14px";
+          empty.textContent = "尚無資料";
+          report.appendChild(empty);
+          return;
+        }
+
+        for (const item of items) {
+          const personal = isPersonalExpense(item);
+          const allocation = personal
+            ? `個人消費：${getPersonalExpenseOwner(item)}`
+            : `分攤：${uniqueTextList(item.shareMemberIds, state.trip.members).join("、")}`;
+          const payment = item.payer === "FUND"
+            ? "公基金"
+            : `${item.payer || ""}・${isCreditCardExpense(item) ? `信用卡（帳單 ${escapeHtml(item.billCurrency || getActualBillCurrency(item) || "TWD")}）` : "現金"}`;
+          const moneyLine = pdfMoneyLine(item);
+
+          const section = document.createElement("section");
+          section.style.cssText = "margin:0 0 14px;padding:12px;border:1px solid #e7e2d6;border-radius:12px;break-inside:avoid";
+          section.innerHTML = `
+            <div style="display:flex;justify-content:space-between;gap:12px">
+              <div>
+                <div style="font-weight:850;font-size:15px">${escapeHtml(item.date || "")}｜${escapeHtml(item.category || "")}</div>
+                ${item.note ? `<div style="margin-top:3px">${escapeHtml(item.note)}</div>` : ""}
+                <div style="font-size:11px;color:#778078;margin-top:4px">${escapeHtml(payment)}・${escapeHtml(allocation)}</div>
+              </div>
+              <div style="text-align:right;white-space:nowrap">
+                <div style="font-weight:900;font-size:16px">${formatMoney(item.amount,item.currency)}</div>
+                ${moneyLine ? `<div style="font-size:11px;color:#778078">${escapeHtml(moneyLine)}</div>` : ""}
+                ${isCardBillPending(item) ? `<div style="font-size:10px;color:#a46b18">信用卡待確認</div>` : ""}
+              </div>
+            </div>`;
+
+          const attachments = (item.attachments || []).filter((x) => x.storagePath);
+          if (attachments.length) {
+            const grid = document.createElement("div");
+            grid.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px";
+            for (const attachment of attachments) {
+              try {
+                const dataUrl = await getAttachmentDataUrl(attachment.storagePath);
+                const img = document.createElement("img");
+                img.src = dataUrl;
+                img.alt = "收據";
+                img.style.cssText = "width:100%;max-height:260px;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa";
+                grid.appendChild(img);
+              } catch (error) {
+                console.warn("PDF receipt image failed:", error);
+                const fallback = document.createElement("div");
+                fallback.textContent = "收據圖片載入失敗";
+                fallback.style.cssText = "padding:18px;background:#f7f3e8;color:#778078;border-radius:8px;text-align:center";
+                grid.appendChild(fallback);
+              }
+            }
+            section.appendChild(grid);
+          }
+          report.appendChild(section);
+        }
+      }
+
+      const sharedExpenses = expenses.filter((item) => !isPersonalExpense(item));
+      const personalExpenses = expenses.filter((item) => isPersonalExpense(item));
+      await appendPdfExpenseGroup("共同消費明細與收據", sharedExpenses, false);
+      await appendPdfExpenseGroup("個人消費明細與收據", personalExpenses, true);
+
+      const footer = document.createElement("div");
+      footer.style.cssText = "margin-top:18px;padding-top:10px;border-top:1px solid #ddd;color:#778078;font-size:10px";
+      footer.textContent = `匯出時間：${new Date().toLocaleString("zh-TW",{hour12:false})}`;
+      report.appendChild(footer);
+      return report;
+    }
+
+    async function exportPdfReport() {
+      if (!state.trip) return;
+      if (state.expenses.some((item) => safeNumber(item.pendingAttachmentCount) > 0)) {
+        return toast("仍有收據等待上傳，請先連線完成同步再匯出 PDF");
+      }
+      if (!navigator.onLine && state.expenses.some((item) => (item.attachments || []).length)) {
+        return toast("PDF 含收據圖片需要網路，請連線後再匯出");
+      }
+      const button = $("exportPdfBtn");
+      const originalTitle = button?.querySelector(".more-title")?.textContent || "匯出 PDF";
+      if (button) button.disabled = true;
+      if (button?.querySelector(".more-title")) button.querySelector(".more-title").textContent = "整理 PDF…";
+      let report = null;
+      try {
+        const html2pdf = await getHtml2PdfModule();
+        report = await buildPdfReportElement();
+        report.style.position = "fixed";
+        report.style.left = "-10000px";
+        report.style.top = "0";
+        report.style.zIndex = "-1";
+        document.body.appendChild(report);
+        const filename = `${state.trip.name || "旅行記帳"}_${today()}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
+        await html2pdf().set({
+          margin: [8, 8, 8, 8],
+          filename,
+          image: { type: "jpeg", quality: 0.9 },
+          html2canvas: { scale: 1.45, useCORS: true, backgroundColor: "#ffffff" },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] }
+        }).from(report).save();
+        toast("PDF 已匯出");
+      } catch (error) {
+        console.error("PDF export failed:", error);
+        toast("PDF 匯出失敗，請確認網路後重試");
+      } finally {
+        report?.remove();
+        if (button) button.disabled = false;
+        if (button?.querySelector(".more-title")) button.querySelector(".more-title").textContent = originalTitle;
+      }
+    }
+
     async function exportWorkbook() {
       if (!state.trip) return;
       let XLSX;
@@ -3241,7 +3603,7 @@
         console.error("Excel module load failed:", error);
         return toast("Excel 元件載入失敗，請確認網路後重試");
       }
-      const settlement = state.settlement?.results || calculateSettlementData();
+      const settlement = calculateSettlementData();
       const wb = XLSX.utils.book_new();
 
       const tripRows = [
@@ -3256,35 +3618,40 @@
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripRows), "旅行資料");
 
-      const expenseSheetRows = [
-        ["日期", "分類", "備註", "消費類型", "分攤／歸屬成員", "幣別", "金額", "參考台幣", "支付者", "付款方式", "信用卡實際台幣"],
-        ...state.expenses.map((item) => {
-          const personal = isPersonalExpense(item);
-          const allocationMembers = personal
-            ? getPersonalExpenseOwner(item)
-            : uniqueTextList(item.shareMemberIds, state.trip.members).join("、");
-          return [
-            item.date,
-            item.category,
-            item.note || "",
-            personal ? "個人消費" : "共同消費",
-            allocationMembers,
-            item.currency,
-            safeNumber(item.amount),
-            getExpenseEstimatedTwd(item),
-            item.payer === "FUND" ? "公基金" : (item.payer || ""),
-            item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
-            hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : ""
-          ];
-        })
-      ];
-      if (!state.expenses.length) expenseSheetRows.push(["尚無消費資料"]);
-      const expenseSheet = XLSX.utils.aoa_to_sheet(expenseSheetRows);
-      expenseSheet["!cols"] = [
-        { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
-        { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }
-      ];
-      XLSX.utils.book_append_sheet(wb, expenseSheet, "消費明細");
+      const expenseHeader = ["日期", "分類", "備註", "消費類型", "分攤／歸屬成員", "幣別", "金額", "參考台幣", "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"];
+      const expenseToRow = (item) => {
+        const personal = isPersonalExpense(item);
+        const allocationMembers = personal
+          ? getPersonalExpenseOwner(item)
+          : uniqueTextList(item.shareMemberIds, state.trip.members).join("、");
+        return [
+          item.date,
+          item.category,
+          item.note || "",
+          personal ? "個人消費" : "共同消費",
+          allocationMembers,
+          item.currency,
+          safeNumber(item.amount),
+          getExpenseTwdForStats(item),
+          item.payer === "FUND" ? "公基金" : (item.payer || ""),
+          item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
+          hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
+          hasActualCardBill(item) ? getActualBillAmount(item) : ""
+        ];
+      };
+      const appendExpenseSheet = (name, items) => {
+        const rows = [expenseHeader, ...items.map(expenseToRow)];
+        if (!items.length) rows.push(["尚無消費資料"]);
+        const sheet = XLSX.utils.aoa_to_sheet(rows);
+        sheet["!cols"] = [
+          { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
+          { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
+        ];
+        XLSX.utils.book_append_sheet(wb, sheet, name);
+      };
+
+      appendExpenseSheet("共同消費", state.expenses.filter((item) => !isPersonalExpense(item)));
+      appendExpenseSheet("個人消費", state.expenses.filter((item) => isPersonalExpense(item)));
 
       const fundRows = state.funds.map((item) => [
         item.date,
@@ -3504,20 +3871,24 @@
     $("expenseForm").addEventListener("submit", saveExpense);
     $("expenseTypeShared").addEventListener("click", () => setExpenseType(false));
     $("expenseTypePersonal").addEventListener("click", () => setExpenseType(true));
-    $("paymentMethodCash").addEventListener("click", () => { $("expenseActualTwd").value = ""; setPaymentMethod("cash"); });
+    $("paymentMethodCash").addEventListener("click", () => { $("expenseActualBillAmount").value = ""; setPaymentMethod("cash"); });
     $("paymentMethodCard").addEventListener("click", () => setPaymentMethod("card"));
     $("expenseAmount").addEventListener("input", () => {
-      if ($("expensePaymentMethod").value === "card" && safeNumber($("expenseActualTwd").value) > 0) $("expenseActualTwd").value = "";
+      if ($("expensePaymentMethod").value === "card" && safeNumber($("expenseActualBillAmount").value) > 0) $("expenseActualBillAmount").value = "";
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expenseCurrency").addEventListener("change", () => {
-      $("expenseActualTwd").value = "";
+      $("expenseActualBillAmount").value = "";
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expensePayer").addEventListener("change", () => { updatePaymentMethodUi(); if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) { state.selectedPersonalOwner = $("expensePayer").value; renderShareMemberChips(); } });
-    $("expenseActualTwd").addEventListener("input", updatePaymentMethodUi);
+    $("expenseActualBillAmount").addEventListener("input", updatePaymentMethodUi);
+    $("expenseBillCurrency").addEventListener("change", () => {
+      $("expenseActualBillAmount").value = "";
+      updatePaymentMethodUi();
+    });
     $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
     $("addReceiptBtn").addEventListener("click", () => $("receiptInput").click());
     $("receiptInput").addEventListener("change", (event) => handleReceiptSelection(event.target.files || []));
@@ -3551,7 +3922,8 @@
     });
     $("clearTripBtn").addEventListener("click", clearTripData);
     $("createTripBtn").addEventListener("click", createNewTrip);
-    $("exportBtn").addEventListener("click", exportWorkbook);
+    $("exportExcelBtn").addEventListener("click", exportWorkbook);
+    $("exportPdfBtn").addEventListener("click", exportPdfReport);
     $("networkPill").addEventListener("click", async () => {
       await refreshOfflineQueueCount();
       if (navigator.onLine) {
