@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v27：帳單幣別限 TWD/USD、Excel/PDF 共同與個人消費分開 -->
+  <!-- iPhone 修正版 v28：歷史匯率依消費日、付款圖示移至金額、PDF 分頁匯出修正 -->
 
   <style>
     :root {
@@ -233,12 +233,12 @@
     }
     .record-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
     .record-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .record-meta-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .record-amount-row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
     .record-payment-icon {
-      width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center;
+      width: 18px; height: 18px; flex: 0 0 18px; display: inline-grid; place-items: center;
       color: var(--muted);
     }
-    .record-payment-icon svg { width: 17px; height: 17px; display: block; }
+    .record-payment-icon svg { width: 18px; height: 18px; display: block; }
     .record-type-tag {
       display: inline-flex; align-items: center; min-height: 24px; margin-top: 6px;
       padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
@@ -884,7 +884,7 @@
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
     let xlsxModulePromise = null;
-    let html2PdfPromise = null;
+    let pdfRenderModulesPromise = null;
 
     async function getXlsxModule() {
       if (!xlsxModulePromise) {
@@ -897,22 +897,53 @@
       return xlsxModulePromise;
     }
 
-    function getHtml2PdfModule() {
-      if (window.html2pdf) return Promise.resolve(window.html2pdf);
-      if (!html2PdfPromise) {
-        html2PdfPromise = new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js";
-          script.async = true;
-          script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error("PDF 元件載入失敗"));
-          script.onerror = () => reject(new Error("PDF 元件載入失敗"));
-          document.head.appendChild(script);
-        }).catch((error) => {
-          html2PdfPromise = null;
+    function loadExternalScript(src, ready) {
+      if (ready()) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const existing = [...document.scripts].find((script) => script.src === src);
+        if (existing) {
+          const timer = setInterval(() => {
+            if (ready()) {
+              clearInterval(timer);
+              clearTimeout(timeout);
+              resolve();
+            }
+          }, 50);
+          const timeout = setTimeout(() => {
+            clearInterval(timer);
+            reject(new Error("PDF 元件載入逾時"));
+          }, 12000);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.onload = () => ready() ? resolve() : reject(new Error("PDF 元件載入失敗"));
+        script.onerror = () => reject(new Error("PDF 元件載入失敗"));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function getPdfRenderModules() {
+      if (!pdfRenderModulesPromise) {
+        pdfRenderModulesPromise = Promise.all([
+          loadExternalScript(
+            "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+            () => typeof window.html2canvas === "function"
+          ),
+          loadExternalScript(
+            "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
+            () => Boolean(window.jspdf?.jsPDF)
+          )
+        ]).then(() => ({
+          html2canvas: window.html2canvas,
+          jsPDF: window.jspdf.jsPDF
+        })).catch((error) => {
+          pdfRenderModulesPromise = null;
           throw error;
         });
       }
-      return html2PdfPromise;
+      return pdfRenderModulesPromise;
     }
 
     // 幣別清單保留在主程式作為保底；即使舊版 firebase-config.js 沒有此欄位，畫面仍會正常顯示。
@@ -933,7 +964,7 @@
 
     const ICON_EDIT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg>`;
     const ICON_DELETE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="m7 7 1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>`;
-    const ICON_CASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M7 9h.01M17 15h.01"></path></svg>`;
+    const ICON_CASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M12 8v8"></path><path d="M14.2 9.6c-.5-.7-1.25-1.05-2.25-1.05-1.3 0-2.2.6-2.2 1.5 0 2.25 4.5 1.05 4.5 3.45 0 .9-.9 1.5-2.25 1.5-1.05 0-1.85-.35-2.45-1.05"></path></svg>`;
     const ICON_CARD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 9h18"></path><path d="M7 15h4"></path></svg>`;
 
     function saveLocalTripState(tripId, tripData = null) {
@@ -1488,7 +1519,8 @@
               currentTripId: local.tripId,
               exchangeRates: { TWD: 1 },
               exchangeRateDate: "",
-              exchangeRateUpdatedAt: ""
+              exchangeRateUpdatedAt: "",
+              exchangeRateHistory: {}
             };
             if (navigator.onLine) await setDoc(settingsRef, repairedSettings, { merge: true });
             saveLocalTripState(local.tripId, tripSnap.data());
@@ -1511,7 +1543,8 @@
         currentTripId: tripRef.id,
         exchangeRates: { TWD: 1 },
         exchangeRateDate: "",
-        exchangeRateUpdatedAt: ""
+        exchangeRateUpdatedAt: "",
+        exchangeRateHistory: {}
       };
 
       const batch = writeBatch(db);
@@ -1626,26 +1659,151 @@
       state.selectedShareMembers = new Set(validSelected.length ? validSelected : state.trip.members);
     }
 
+    function normalizeRatesFromTwdSource(sourceRates) {
+      const rates = { TWD: 1 };
+      Object.keys(CURRENCIES).forEach((currency) => {
+        if (currency === "TWD") return;
+        const value = safeNumber(sourceRates?.[currency] ?? sourceRates?.[currency.toLowerCase()]);
+        if (value > 0) rates[currency] = value;
+      });
+      return rates;
+    }
+
+    function getCachedHistoricalRateEntry(dateKey) {
+      const entry = state.settings?.exchangeRateHistory?.[dateKey];
+      if (!entry) return null;
+      if (entry.rates && typeof entry.rates === "object") return entry;
+      if (typeof entry === "object" && safeNumber(entry.TWD) === 1) {
+        return { rates: entry, sourceDate: dateKey, fetchedAt: "", isFallback: false };
+      }
+      return null;
+    }
+
+    function shiftDateKey(dateKey, days) {
+      const [year, month, day] = String(dateKey || "").split("-").map(Number);
+      if (!year || !month || !day) return "";
+      const date = new Date(Date.UTC(year, month - 1, day));
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    }
+
+    async function fetchHistoricalRatesForDate(dateKey) {
+      // 依消費日查歷史匯率。若指定日資料暫缺（如休市日），最多往前 7 天找最近可用日。
+      let lastError = null;
+      for (let offset = 0; offset <= 7; offset += 1) {
+        const candidateDate = shiftDateKey(dateKey, -offset);
+        if (!candidateDate) break;
+        const urls = [
+          `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${candidateDate}/v1/currencies/twd.min.json`,
+          `https://${candidateDate}.currency-api.pages.dev/v1/currencies/twd.min.json`,
+          `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${candidateDate}/v1/currencies/twd.json`,
+          `https://${candidateDate}.currency-api.pages.dev/v1/currencies/twd.json`
+        ];
+        for (const url of urls) {
+          try {
+            const response = await fetch(url, { cache: "no-store" });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            const sourceRates = data?.twd || data?.TWD;
+            if (!sourceRates) throw new Error("歷史匯率格式不符");
+            const rates = normalizeRatesFromTwdSource(sourceRates);
+            if (Object.keys(rates).length <= 1) throw new Error("歷史匯率內容不足");
+            return {
+              rates,
+              sourceDate: String(data?.date || candidateDate),
+              fetchedAt: new Date().toISOString(),
+              isFallback: false
+            };
+          } catch (error) {
+            lastError = error;
+          }
+        }
+      }
+      throw lastError || new Error("找不到指定日期的歷史匯率");
+    }
+
+    async function cacheHistoricalRateEntry(requestedDate, entry) {
+      if (!state.settings || !requestedDate || !entry?.rates) return;
+      state.settings.exchangeRateHistory ||= {};
+      state.settings.exchangeRateHistory[requestedDate] = entry;
+      if (!navigator.onLine) return;
+      try {
+        await updateDoc(doc(db, "appSettings", "main"), {
+          [`exchangeRateHistory.${requestedDate}`]: entry
+        });
+      } catch (error) {
+        console.warn("Historical rate cache failed:", error);
+      }
+    }
+
+    async function resolveRatesForExpenseDate(dateKey) {
+      const requestedDate = dateKey || today();
+      const cached = getCachedHistoricalRateEntry(requestedDate);
+      if (cached?.rates) return { ...cached, isFallback: Boolean(cached.isFallback) };
+
+      if (requestedDate === state.settings?.exchangeRateDate && state.settings?.exchangeRates) {
+        const entry = {
+          rates: state.settings.exchangeRates,
+          sourceDate: requestedDate,
+          fetchedAt: state.settings.exchangeRateUpdatedAt || new Date().toISOString(),
+          isFallback: false
+        };
+        await cacheHistoricalRateEntry(requestedDate, entry);
+        return entry;
+      }
+
+      if (navigator.onLine) {
+        try {
+          const entry = await fetchHistoricalRatesForDate(requestedDate);
+          await cacheHistoricalRateEntry(requestedDate, entry);
+          return entry;
+        } catch (error) {
+          console.warn(`Historical rate lookup failed for ${requestedDate}:`, error);
+        }
+      }
+
+      // 離線或歷史服務暫不可用時仍允許記帳，但明確標記為 fallback。
+      return {
+        rates: state.settings?.exchangeRates || { TWD: 1 },
+        sourceDate: state.settings?.exchangeRateDate || today(),
+        fetchedAt: state.settings?.exchangeRateUpdatedAt || new Date().toISOString(),
+        isFallback: true
+      };
+    }
+
     async function updateExchangeRatesOnceDaily() {
       if (!state.settings || !navigator.onLine) return;
       const dateKey = today();
-      if (state.settings.exchangeRateDate === dateKey) return;
+      if (state.settings.exchangeRateDate === dateKey) {
+        if (!getCachedHistoricalRateEntry(dateKey) && state.settings.exchangeRates) {
+          await cacheHistoricalRateEntry(dateKey, {
+            rates: state.settings.exchangeRates,
+            sourceDate: dateKey,
+            fetchedAt: state.settings.exchangeRateUpdatedAt || new Date().toISOString(),
+            isFallback: false
+          });
+        }
+        return;
+      }
       try {
         const response = await fetch(APP_CONFIG.exchangeRateApiUrl, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const sourceRates = data.rates || data.conversion_rates;
         if (!sourceRates) throw new Error("匯率格式不符");
-        const rates = { TWD: 1 };
-        Object.keys(CURRENCIES).forEach((currency) => {
-          if (currency === "TWD") return;
-          const value = safeNumber(sourceRates[currency]);
-          if (value > 0) rates[currency] = value;
-        });
+        const rates = normalizeRatesFromTwdSource(sourceRates);
+        const updatedAt = new Date().toISOString();
+        const historyEntry = { rates, sourceDate: dateKey, fetchedAt: updatedAt, isFallback: false };
+        state.settings.exchangeRates = rates;
+        state.settings.exchangeRateDate = dateKey;
+        state.settings.exchangeRateUpdatedAt = updatedAt;
+        state.settings.exchangeRateHistory ||= {};
+        state.settings.exchangeRateHistory[dateKey] = historyEntry;
         await updateDoc(doc(db, "appSettings", "main"), {
           exchangeRates: rates,
           exchangeRateDate: dateKey,
-          exchangeRateUpdatedAt: new Date().toISOString()
+          exchangeRateUpdatedAt: updatedAt,
+          [`exchangeRateHistory.${dateKey}`]: historyEntry
         });
       } catch (error) {
         console.warn("Exchange rate update failed; using previous rates:", error);
@@ -1747,8 +1905,11 @@
         return;
       }
       const editing = getEditingExpense();
-      const sameAsSaved = editing && editing.currency === currency && Math.abs(safeNumber(editing.amount) - amount) < 0.000001;
-      const estimated = sameAsSaved ? getExpenseEstimatedTwd(editing) : estimateTwdByRate(amount, currency);
+      const selectedDate = $("expenseDate")?.value || today();
+      const sameAsSaved = editing && editing.currency === currency && editing.date === selectedDate && Math.abs(safeNumber(editing.amount) - amount) < 0.000001;
+      const cachedEntry = getCachedHistoricalRateEntry(selectedDate);
+      const previewRate = safeNumber(cachedEntry?.rates?.[currency]) || getCurrentExchangeRate(currency);
+      const estimated = sameAsSaved ? getExpenseEstimatedTwd(editing) : estimateTwdByRate(amount, currency, previewRate);
       el.textContent = amount > 0
         ? (estimated > 0 ? `預估折合：約 ${formatMoney(estimated, "TWD")}` : "預估折合：目前無可用匯率")
         : "預估折合：約 NT$—";
@@ -2175,15 +2336,30 @@
         : null;
       const actualInput = safeNumber($("expenseActualBillAmount").value);
       const actualBillAmount = paymentMethod === "card" && actualInput > 0 ? actualInput : null;
-      const sameBaseAmount = original && original.currency === currency && Math.abs(safeNumber(original.amount) - amount) < 0.000001;
-      let exchangeRateSnapshot = sameBaseAmount ? safeNumber(original.exchangeRateSnapshot) : 0;
-      let estimatedTwdAmount = sameBaseAmount ? safeNumber(original.estimatedTwdAmount) : 0;
+      const expenseDate = $("expenseDate").value;
+      const sameBaseTransaction = original && original.currency === currency && original.date === expenseDate && Math.abs(safeNumber(original.amount) - amount) < 0.000001;
+      const preserveSnapshot = sameBaseTransaction && safeNumber(original?.exchangeRateSnapshot) > 0 && safeNumber(original?.estimatedTwdAmount) > 0 && !original?.exchangeRateIsFallback;
+      let exchangeRateSnapshot = preserveSnapshot ? safeNumber(original.exchangeRateSnapshot) : 0;
+      let estimatedTwdAmount = preserveSnapshot ? safeNumber(original.estimatedTwdAmount) : 0;
+      let exchangeRateSourceDate = preserveSnapshot
+        ? (original.exchangeRateSourceDate || String(original.exchangeRateCapturedAt || "").slice(0, 10) || "")
+        : "";
+      let exchangeRateIsFallback = preserveSnapshot ? Boolean(original.exchangeRateIsFallback) : false;
+      let exchangeRateCapturedAt = preserveSnapshot && original?.exchangeRateCapturedAt ? original.exchangeRateCapturedAt : "";
+
       if (currency === "TWD") {
         exchangeRateSnapshot = 1;
         estimatedTwdAmount = amount;
+        exchangeRateSourceDate = expenseDate;
+        exchangeRateIsFallback = false;
+        exchangeRateCapturedAt ||= new Date().toISOString();
       } else if (!(exchangeRateSnapshot > 0 && estimatedTwdAmount > 0)) {
-        exchangeRateSnapshot = getCurrentExchangeRate(currency);
+        const resolvedRates = await resolveRatesForExpenseDate(expenseDate);
+        exchangeRateSnapshot = safeNumber(resolvedRates?.rates?.[currency]);
         estimatedTwdAmount = estimateTwdByRate(amount, currency, exchangeRateSnapshot);
+        exchangeRateSourceDate = resolvedRates?.sourceDate || "";
+        exchangeRateIsFallback = Boolean(resolvedRates?.isFallback);
+        exchangeRateCapturedAt = resolvedRates?.fetchedAt || new Date().toISOString();
       }
       const previousBillCurrency = getActualBillCurrency(original);
       const previousBillAmount = getActualBillAmount(original);
@@ -2215,9 +2391,9 @@
         paymentMethod,
         exchangeRateSnapshot: exchangeRateSnapshot || null,
         estimatedTwdAmount: estimatedTwdAmount || null,
-        exchangeRateCapturedAt: sameBaseAmount && original?.exchangeRateCapturedAt
-          ? original.exchangeRateCapturedAt
-          : (state.settings?.exchangeRateUpdatedAt || new Date().toISOString()),
+        exchangeRateSourceDate: exchangeRateSourceDate || null,
+        exchangeRateIsFallback,
+        exchangeRateCapturedAt: exchangeRateCapturedAt || new Date().toISOString(),
         billCurrency: ["TWD", "USD"].includes($("expenseBillCurrency").value) ? $("expenseBillCurrency").value : "TWD",
         actualBillAmount,
         actualBillExchangeRateSnapshot: actualBillAmount ? (actualBillExchangeRateSnapshot || null) : null,
@@ -2235,7 +2411,7 @@
         isPersonalExpense: personal,
         personalOwnerId: personal ? personalOwnerId : null,
         shareMemberIds,
-        date: $("expenseDate").value,
+        date: expenseDate,
         note: $("expenseNote").value.trim()
       };
       if (data.payer === "FUND") {
@@ -2532,17 +2708,17 @@
       return `<article class="record expense-record">
         <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
-          <div class="record-meta-row">
-            <span class="record-payment-icon" aria-label="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}" title="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}">${isCreditCardExpense(item) ? ICON_CARD : ICON_CASH}</span>
-            <div class="record-meta">${escapeHtml(payer)}・${escapeHtml(allocationText)}</div>
-          </div>
+          <div class="record-meta">${escapeHtml(payer)}・${escapeHtml(allocationText)}</div>
           ${personal ? `<div class="record-type-tag">個人消費</div>` : ""}
           ${item._pendingSync ? `<div class="sync-note">等待同步</div>` : ""}
           ${safeNumber(item.pendingAttachmentCount) ? `<div class="sync-note">${safeNumber(item.pendingAttachmentCount)} 張收據等待上傳</div>` : ""}
           ${(item.attachments || []).length ? `<div class="record-receipts">${(item.attachments || []).map((attachment) => `<button class="record-receipt-thumb" type="button" data-view-attachment-path="${escapeHtml(attachment.storagePath || "")}" aria-label="查看收據圖片"><img data-storage-path="${escapeHtml(attachment.storagePath || "")}" alt="收據縮圖" /></button>`).join("")}</div>` : ""}
         </div>
         <div class="record-side">
-          <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
+          <div class="record-amount-row">
+            <span class="record-payment-icon" aria-label="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}" title="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}">${isCreditCardExpense(item) ? ICON_CARD : ICON_CASH}</span>
+            <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
+          </div>
           ${billLine}
           ${isCardBillPending(item) ? `<div class="record-card-status">信用卡待確認</div>` : ""}
           ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} ${personal ? "個人消費" : "分攤"}：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
@@ -3553,6 +3729,77 @@
       return report;
     }
 
+    async function waitForPdfRenderReady(root) {
+      if (document.fonts?.ready) {
+        try { await document.fonts.ready; } catch {}
+      }
+      const images = [...root.querySelectorAll("img")];
+      await Promise.all(images.map(async (img) => {
+        if (img.complete && img.naturalWidth > 0) {
+          try { await img.decode?.(); } catch {}
+          return;
+        }
+        await new Promise((resolve) => {
+          const done = () => resolve();
+          img.addEventListener("load", done, { once: true });
+          img.addEventListener("error", done, { once: true });
+          setTimeout(done, 6000);
+        });
+        try { await img.decode?.(); } catch {}
+      }));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+
+    function createPdfPageElement() {
+      const page = document.createElement("div");
+      page.style.cssText = [
+        "width:760px",
+        "box-sizing:border-box",
+        "padding:28px",
+        "background:#fff",
+        "color:#1e2823",
+        "font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC',sans-serif",
+        "font-size:13px",
+        "line-height:1.55",
+        "overflow:hidden"
+      ].join(";");
+      return page;
+    }
+
+    async function paginatePdfReport(report, host) {
+      const PAGE_MAX_HEIGHT = 1010;
+      const pages = [];
+      const sourceChildren = [...report.children];
+      let page = createPdfPageElement();
+      host.appendChild(page);
+      pages.push(page);
+
+      for (const source of sourceChildren) {
+        const forceNewPage = source.style.breakBefore === "page" || source.style.pageBreakBefore === "always";
+        if (forceNewPage && page.children.length) {
+          page = createPdfPageElement();
+          host.appendChild(page);
+          pages.push(page);
+        }
+
+        const clone = source.cloneNode(true);
+        clone.style.breakBefore = "auto";
+        clone.style.pageBreakBefore = "auto";
+        page.appendChild(clone);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        if (page.scrollHeight > PAGE_MAX_HEIGHT && page.children.length > 1) {
+          page.removeChild(clone);
+          page = createPdfPageElement();
+          host.appendChild(page);
+          pages.push(page);
+          page.appendChild(clone);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+      }
+      return pages.filter((item) => item.children.length);
+    }
+
     async function exportPdfReport() {
       if (!state.trip) return;
       if (state.expenses.some((item) => safeNumber(item.pendingAttachmentCount) > 0)) {
@@ -3561,33 +3808,99 @@
       if (!navigator.onLine && state.expenses.some((item) => (item.attachments || []).length)) {
         return toast("PDF 含收據圖片需要網路，請連線後再匯出");
       }
+
       const button = $("exportPdfBtn");
       const originalTitle = button?.querySelector(".more-title")?.textContent || "匯出 PDF";
       if (button) button.disabled = true;
       if (button?.querySelector(".more-title")) button.querySelector(".more-title").textContent = "整理 PDF…";
+
       let report = null;
+      let renderHost = null;
+      let loadingCover = null;
       try {
-        const html2pdf = await getHtml2PdfModule();
+        const { html2canvas, jsPDF } = await getPdfRenderModules();
         report = await buildPdfReportElement();
-        report.style.position = "fixed";
-        report.style.left = "-10000px";
-        report.style.top = "0";
-        report.style.zIndex = "-1";
-        document.body.appendChild(report);
+
+        // 報表真正放在可渲染區域，避免 iPhone/Safari 對極端 off-screen 元素輸出空白。
+        renderHost = document.createElement("div");
+        renderHost.setAttribute("aria-hidden", "true");
+        renderHost.style.cssText = [
+          "position:absolute",
+          `left:${window.scrollX}px`,
+          `top:${window.scrollY}px`,
+          "width:760px",
+          "background:#fff",
+          "z-index:2147483000",
+          "pointer-events:none",
+          "overflow:visible"
+        ].join(";");
+        document.body.appendChild(renderHost);
+
+        loadingCover = document.createElement("div");
+        loadingCover.style.cssText = [
+          "position:fixed",
+          "inset:0",
+          "display:grid",
+          "place-items:center",
+          "background:#f7f3e8",
+          "color:#53612a",
+          "font:800 15px -apple-system,BlinkMacSystemFont,'PingFang TC',sans-serif",
+          "z-index:2147483646"
+        ].join(";");
+        loadingCover.textContent = "正在產生 PDF…";
+        document.body.appendChild(loadingCover);
+
+        // 先把原報表暫時掛載以確保圖片與中文字型都完成 layout，再切成小頁逐頁轉 canvas。
+        report.style.position = "static";
+        renderHost.appendChild(report);
+        await waitForPdfRenderReady(report);
+        renderHost.removeChild(report);
+
+        const pages = await paginatePdfReport(report, renderHost);
+        if (!pages.length) throw new Error("PDF 沒有可匯出的內容");
+        await waitForPdfRenderReady(renderHost);
+
+        const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+        const usableWidth = pageWidth - margin * 2;
+        const usableHeight = pageHeight - margin * 2;
+
+        for (let index = 0; index < pages.length; index += 1) {
+          if (button?.querySelector(".more-title")) {
+            button.querySelector(".more-title").textContent = `產生 PDF ${index + 1}/${pages.length}`;
+          }
+          const canvas = await html2canvas(pages[index], {
+            scale: 1.25,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 760
+          });
+          if (!canvas.width || !canvas.height) throw new Error("PDF 頁面轉換失敗");
+          const imageData = canvas.toDataURL("image/jpeg", 0.9);
+          const ratio = Math.min(usableWidth / canvas.width, usableHeight / canvas.height);
+          const drawWidth = canvas.width * ratio;
+          const drawHeight = canvas.height * ratio;
+          if (index > 0) pdf.addPage();
+          pdf.addImage(imageData, "JPEG", margin, margin, drawWidth, drawHeight, undefined, "FAST");
+          canvas.width = 1;
+          canvas.height = 1;
+        }
+
         const filename = `${state.trip.name || "旅行記帳"}_${today()}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
-        await html2pdf().set({
-          margin: [8, 8, 8, 8],
-          filename,
-          image: { type: "jpeg", quality: 0.9 },
-          html2canvas: { scale: 1.45, useCORS: true, backgroundColor: "#ffffff" },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] }
-        }).from(report).save();
+        pdf.save(filename);
         toast("PDF 已匯出");
       } catch (error) {
         console.error("PDF export failed:", error);
         toast("PDF 匯出失敗，請確認網路後重試");
       } finally {
+        loadingCover?.remove();
+        renderHost?.remove();
         report?.remove();
         if (button) button.disabled = false;
         if (button?.querySelector(".more-title")) button.querySelector(".more-title").textContent = originalTitle;
@@ -3883,6 +4196,7 @@
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
+    $("expenseDate").addEventListener("change", updateExpenseTwdPreview);
     $("expensePayer").addEventListener("change", () => { updatePaymentMethodUi(); if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) { state.selectedPersonalOwner = $("expensePayer").value; renderShareMemberChips(); } });
     $("expenseActualBillAmount").addEventListener("input", updatePaymentMethodUi);
     $("expenseBillCurrency").addEventListener("change", () => {
