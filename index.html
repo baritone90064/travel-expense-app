@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v23：程式整理、重複邏輯整併與最終版面設定 -->
+  <!-- iPhone 修正版 v24：新增信用卡帳單實際台幣、凍結記帳匯率與預估台幣 -->
 
   <style>
     :root {
@@ -182,6 +182,20 @@
     input:focus, select:focus, textarea:focus { border-color: #9eaa68; box-shadow: 0 0 0 3px rgba(111, 127, 58, .12); }
     .amount-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 9px; }
     .amount-input { font-size: 25px; font-weight: 800; }
+    .amount-twd-preview {
+      min-height: 20px; margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 720; line-height: 1.4;
+    }
+    .card-billing-box {
+      margin-top: 9px; padding: 11px 12px; border: 1px solid #e5dfd1; border-radius: 14px; background: #fffaf0;
+    }
+    .card-billing-box label { margin-bottom: 6px; }
+    .card-billing-status { margin-top: 6px; color: var(--warning); font-size: 11px; font-weight: 760; line-height: 1.4; }
+    .record-twd { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 720; text-align: right; white-space: nowrap; }
+    .record-twd.actual { color: var(--primary-dark); font-weight: 820; }
+    .record-card-status {
+      margin-top: 5px; padding: 3px 7px; border-radius: 999px; font-size: 10px; font-weight: 820; line-height: 1.2;
+      color: #8f5b12; background: #fff3db; border: 1px solid #e7c78f; white-space: nowrap;
+    }
     .hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
     .sync-note { margin-top: 6px; color: var(--warning); font-size: 11px; font-weight: 750; line-height: 1.45; }
     .save-status {
@@ -616,11 +630,27 @@
               <input id="expenseAmount" class="amount-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" required />
               <select id="expenseCurrency" required></select>
             </div>
+            <div id="expenseTwdPreview" class="amount-twd-preview"></div>
           </div>
 
           <div class="field">
             <label for="expensePayer">支付者</label>
             <select id="expensePayer" required></select>
+          </div>
+
+          <div class="field">
+            <label>付款方式</label>
+            <input id="expensePaymentMethod" type="hidden" value="cash" />
+            <div class="segmented" role="group" aria-label="付款方式">
+              <button id="paymentMethodCash" class="segment active" type="button" aria-pressed="true">現金</button>
+              <button id="paymentMethodCard" class="segment" type="button" aria-pressed="false">信用卡</button>
+            </div>
+            <div id="creditCardBillingBox" class="card-billing-box hidden">
+              <label for="expenseActualTwd">信用卡帳單實際台幣金額</label>
+              <input id="expenseActualTwd" type="number" inputmode="decimal" min="0" step="1" placeholder="尚未入帳可先留空" />
+              <div class="hint">正式入帳後再填，只記帳單上的消費金額，不含海外手續費與信用卡回饋。</div>
+              <div id="creditCardBillingStatus" class="card-billing-status"></div>
+            </div>
           </div>
 
           <div class="field">
@@ -804,6 +834,7 @@
         <div class="field"><label for="filterCategory">分類</label><select id="filterCategory"></select></div>
         <div class="field"><label for="filterCurrency">幣別</label><select id="filterCurrency"></select></div>
         <div class="field"><label for="filterPayer">支付者</label><select id="filterPayer"></select></div>
+        <div class="field"><label for="filterCardStatus">信用卡帳單</label><select id="filterCardStatus"><option value="">全部</option><option value="pending">待確認實際台幣</option><option value="confirmed">已更新實際台幣</option></select></div>
         <div class="field"><label for="filterShareMember">分攤／消費歸屬成員</label><select id="filterShareMember"></select></div>
         <div class="button-row">
           <button id="clearFilterBtn" class="ghost-btn" type="button">清除</button>
@@ -1278,6 +1309,7 @@
       ["openFilterBtn", "exportBtn", "logoutBtn"].forEach((id) => {
         if ($(id)) $(id).disabled = false;
       });
+      if ($("paymentMethodCard")) updatePaymentMethodUi();
     }
 
     async function confirmServerBeforeWrite() {
@@ -1311,6 +1343,7 @@
       localStorage.setItem(getLastEntryKey(), JSON.stringify({
         currency: expense.currency,
         payer: expense.payer,
+        paymentMethod: expense.paymentMethod === "card" ? "card" : "cash",
         shareMemberIds: expense.shareMemberIds
       }));
     }
@@ -1593,6 +1626,102 @@
       return safeNumber(amount) / rate;
     }
 
+    function getCurrentExchangeRate(currency) {
+      if (currency === "TWD") return 1;
+      return safeNumber(state.settings?.exchangeRates?.[currency]);
+    }
+
+    function estimateTwdByRate(amount, currency, rate = getCurrentExchangeRate(currency)) {
+      const value = safeNumber(amount);
+      if (currency === "TWD") return value;
+      return rate > 0 ? value / rate : 0;
+    }
+
+    function getExpenseEstimatedTwd(item) {
+      if (!item) return 0;
+      if (item.currency === "TWD") return safeNumber(item.amount);
+      const frozen = safeNumber(item.estimatedTwdAmount);
+      if (frozen > 0) return frozen;
+      const frozenRate = safeNumber(item.exchangeRateSnapshot);
+      if (frozenRate > 0) return estimateTwdByRate(item.amount, item.currency, frozenRate);
+      // 舊資料沒有匯率快照時，才退回目前匯率，確保舊版資料仍可顯示。
+      return convertToTwd(item.amount, item.currency);
+    }
+
+    function isCreditCardExpense(item) {
+      return item?.paymentMethod === "card";
+    }
+
+    function hasActualCardTwd(item) {
+      if (!isCreditCardExpense(item) || item?.currency === "TWD") return false;
+      return safeNumber(item.actualTwdAmount) > 0;
+    }
+
+    function isCardBillPending(item) {
+      return isCreditCardExpense(item) && item?.currency !== "TWD" && !hasActualCardTwd(item);
+    }
+
+    function getExpenseTwdForStats(item) {
+      if (!item) return 0;
+      if (item.currency === "TWD") return safeNumber(item.amount);
+      return hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : getExpenseEstimatedTwd(item);
+    }
+
+    function updateExpenseTwdPreview() {
+      const el = $("expenseTwdPreview");
+      if (!el) return;
+      const amount = safeNumber($("expenseAmount")?.value);
+      const currency = $("expenseCurrency")?.value || "";
+      if (!currency || currency === "TWD") {
+        el.textContent = "";
+        return;
+      }
+      const editing = getEditingExpense();
+      const sameAsSaved = editing && editing.currency === currency && Math.abs(safeNumber(editing.amount) - amount) < 0.000001;
+      const estimated = sameAsSaved ? getExpenseEstimatedTwd(editing) : estimateTwdByRate(amount, currency);
+      el.textContent = amount > 0
+        ? (estimated > 0 ? `預估折合：約 ${formatMoney(estimated, "TWD")}` : "預估折合：目前無可用匯率")
+        : "預估折合：約 NT$—";
+    }
+
+    function setPaymentMethod(method) {
+      const normalized = method === "card" ? "card" : "cash";
+      $("expensePaymentMethod").value = normalized;
+      $("paymentMethodCash").classList.toggle("active", normalized === "cash");
+      $("paymentMethodCash").setAttribute("aria-pressed", String(normalized === "cash"));
+      $("paymentMethodCard").classList.toggle("active", normalized === "card");
+      $("paymentMethodCard").setAttribute("aria-pressed", String(normalized === "card"));
+      updatePaymentMethodUi();
+    }
+
+    function updatePaymentMethodUi() {
+      const payer = $("expensePayer")?.value;
+      const currency = $("expenseCurrency")?.value;
+      const cardButton = $("paymentMethodCard");
+      const box = $("creditCardBillingBox");
+      if (!cardButton || !box) return;
+
+      const fundPaid = payer === "FUND";
+      cardButton.disabled = fundPaid;
+      if (fundPaid && $("expensePaymentMethod").value === "card") {
+        $("expensePaymentMethod").value = "cash";
+        $("paymentMethodCash").classList.add("active");
+        $("paymentMethodCash").setAttribute("aria-pressed", "true");
+        cardButton.classList.remove("active");
+        cardButton.setAttribute("aria-pressed", "false");
+        $("expenseActualTwd").value = "";
+      }
+
+      const foreignCard = $("expensePaymentMethod").value === "card" && currency && currency !== "TWD" && !fundPaid;
+      box.classList.toggle("hidden", !foreignCard);
+      if (!foreignCard) {
+        $("creditCardBillingStatus").textContent = "";
+        return;
+      }
+      const actual = safeNumber($("expenseActualTwd").value);
+      $("creditCardBillingStatus").textContent = actual > 0 ? "已填入實際帳單金額" : "待信用卡正式入帳後補填";
+    }
+
     function navigate(page) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       document.body.classList.remove("keyboard-open");
@@ -1661,7 +1790,7 @@
       $("homeTripName").textContent = trip.name;
       const dateText = [trip.startDate, trip.endDate].filter(Boolean).join(" ～ ") || "尚未設定日期";
       $("homeTripMeta").innerHTML = `<span>日期：${escapeHtml(dateText)}</span><span>成員：${trip.members.length} 人</span><span>幣別：${trip.enabledCurrencies.join("・")}</span>`;
-      const twdTotal = state.expenses.reduce((sum, item) => sum + (isPersonalExpense(item) ? 0 : convertToTwd(item.amount, item.currency)), 0);
+      const twdTotal = state.expenses.reduce((sum, item) => sum + (isPersonalExpense(item) ? 0 : getExpenseTwdForStats(item)), 0);
       $("referenceTwd").textContent = formatMoney(twdTotal, "TWD");
       $("rateUpdatedAt").textContent = formatRateUpdatedAt(state.settings?.exchangeRateUpdatedAt);
 
@@ -1696,6 +1825,8 @@
       $("expenseCategory").value = trip.categories.includes(currentCategory) ? currentCategory : trip.categories[0];
 
       renderShareMemberChips();
+      updateExpenseTwdPreview();
+      updatePaymentMethodUi();
     }
 
     function makeId() {
@@ -1870,6 +2001,8 @@
       const last = loadLastEntry();
       $("expenseCurrency").value = state.trip.enabledCurrencies.includes(last?.currency) ? last.currency : state.trip.primaryCurrency;
       $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
+      $("expenseActualTwd").value = "";
+      setPaymentMethod($("expensePayer").value === "FUND" ? "cash" : (last?.paymentMethod === "card" ? "card" : "cash"));
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
       state.selectedPersonalOwner = state.trip.members.includes($("expensePayer").value)
@@ -1877,6 +2010,8 @@
         : state.trip.members[0] || null;
       // 每一筆新記帳預設為共同消費，避免沿用上一筆個人消費造成誤記。
       setExpenseType(false);
+      updateExpenseTwdPreview();
+      updatePaymentMethodUi();
       renderReceiptPreview();
     }
 
@@ -1943,10 +2078,40 @@
         return toast("此瀏覽器無法建立可靠的離線暫存，請連線後再試");
       }
 
+      const id = $("expenseId").value;
+      const original = id ? state.expenses.find((item) => item.id === id) : null;
+      const currency = $("expenseCurrency").value;
+      const payer = $("expensePayer").value;
+      const paymentMethod = payer === "FUND" ? "cash" : ($("expensePaymentMethod").value === "card" ? "card" : "cash");
+      const actualInput = safeNumber($("expenseActualTwd").value);
+      const actualTwdAmount = paymentMethod === "card" && currency !== "TWD" && actualInput > 0 ? actualInput : null;
+      const sameBaseAmount = original && original.currency === currency && Math.abs(safeNumber(original.amount) - amount) < 0.000001;
+      let exchangeRateSnapshot = sameBaseAmount ? safeNumber(original.exchangeRateSnapshot) : 0;
+      let estimatedTwdAmount = sameBaseAmount ? safeNumber(original.estimatedTwdAmount) : 0;
+      if (currency === "TWD") {
+        exchangeRateSnapshot = 1;
+        estimatedTwdAmount = amount;
+      } else if (!(exchangeRateSnapshot > 0 && estimatedTwdAmount > 0)) {
+        exchangeRateSnapshot = getCurrentExchangeRate(currency);
+        estimatedTwdAmount = estimateTwdByRate(amount, currency, exchangeRateSnapshot);
+      }
+      const previousActual = safeNumber(original?.actualTwdAmount);
+      const actualChanged = Math.abs(previousActual - safeNumber(actualTwdAmount)) > 0.000001;
+
       const data = {
         amount,
-        currency: $("expenseCurrency").value,
-        payer: $("expensePayer").value,
+        currency,
+        payer,
+        paymentMethod,
+        exchangeRateSnapshot: exchangeRateSnapshot || null,
+        estimatedTwdAmount: estimatedTwdAmount || null,
+        exchangeRateCapturedAt: sameBaseAmount && original?.exchangeRateCapturedAt
+          ? original.exchangeRateCapturedAt
+          : (state.settings?.exchangeRateUpdatedAt || new Date().toISOString()),
+        actualTwdAmount,
+        actualTwdUpdatedAt: actualTwdAmount
+          ? (actualChanged ? new Date().toISOString() : (original?.actualTwdUpdatedAt || new Date().toISOString()))
+          : null,
         category: $("expenseCategory").value,
         isPersonalExpense: personal,
         personalOwnerId: personal ? personalOwnerId : null,
@@ -1954,9 +2119,6 @@
         date: $("expenseDate").value,
         note: $("expenseNote").value.trim()
       };
-
-      const id = $("expenseId").value;
-      const original = id ? state.expenses.find((item) => item.id === id) : null;
       if (data.payer === "FUND") {
         const totals = getCurrencyTotals();
         let available = safeNumber(totals[data.currency]?.fundBalance);
@@ -2027,6 +2189,8 @@
       $("expenseAmount").value = expense.amount;
       $("expenseCurrency").value = expense.currency;
       $("expensePayer").value = expense.payer;
+      $("expenseActualTwd").value = safeNumber(expense.actualTwdAmount) > 0 ? safeNumber(expense.actualTwdAmount) : "";
+      setPaymentMethod(expense.payer === "FUND" ? "cash" : (expense.paymentMethod === "card" ? "card" : "cash"));
       $("expenseCategory").value = expense.category;
       $("expenseDate").value = expense.date;
       $("expenseNote").value = expense.note || "";
@@ -2034,6 +2198,8 @@
       state.selectedShareMembers = new Set(personal ? state.trip.members : (expense.shareMemberIds || []));
       state.selectedPersonalOwner = personal ? getPersonalExpenseOwner(expense) : null;
       setExpenseType(personal);
+      updateExpenseTwdPreview();
+      updatePaymentMethodUi();
       resetExpenseAttachmentDraft();
       renderReceiptPreview();
     }
@@ -2070,6 +2236,8 @@
         if (f.category && item.category !== f.category) return false;
         if (f.currency && item.currency !== f.currency) return false;
         if (f.payer && item.payer !== f.payer) return false;
+        if (f.cardStatus === "pending" && !isCardBillPending(item)) return false;
+        if (f.cardStatus === "confirmed" && !(isCreditCardExpense(item) && (item.currency === "TWD" || hasActualCardTwd(item)))) return false;
         if (f.shareMember) {
           if (isPersonalExpense(item)) {
             if (getPersonalExpenseOwner(item) !== f.shareMember) return false;
@@ -2113,7 +2281,7 @@
       state.expenses.forEach((item) => {
         if (!includePersonal && isPersonalExpense(item)) return;
         totals[item.category] ||= { twd: 0, currencies: {} };
-        totals[item.category].twd += convertToTwd(item.amount, item.currency);
+        totals[item.category].twd += getExpenseTwdForStats(item);
         totals[item.category].currencies[item.currency] =
           safeNumber(totals[item.category].currencies[item.currency]) + safeNumber(item.amount);
       });
@@ -2127,7 +2295,7 @@
       const personalByMember = Object.fromEntries(state.trip.members.map((member) => [member, 0]));
 
       state.expenses.forEach((item) => {
-        const twd = convertToTwd(item.amount, item.currency);
+        const twd = getExpenseTwdForStats(item);
         if (isPersonalExpense(item)) {
           const owner = getPersonalExpenseOwner(item);
           if (owner) personalByMember[owner] = safeNumber(personalByMember[owner]) + twd;
@@ -2231,6 +2399,15 @@
         : `分攤：${(item.shareMemberIds || []).join("、")}`;
       const selectedMember = state.filters.shareMember;
       const selectedMemberShare = getExpenseShareAmount(item, selectedMember);
+      const estimatedTwd = getExpenseEstimatedTwd(item);
+      const actualTwd = hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : 0;
+      const twdLine = item.currency === "TWD"
+        ? ""
+        : actualTwd > 0
+          ? `<div class="record-twd actual">實際 ${formatMoney(actualTwd, "TWD")}</div>`
+          : estimatedTwd > 0
+            ? `<div class="record-twd">約 ${formatMoney(estimatedTwd, "TWD")}</div>`
+            : `<div class="record-twd">暫無台幣估算</div>`;
       return `<article class="record expense-record">
         <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
@@ -2242,6 +2419,8 @@
         </div>
         <div class="record-side">
           <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
+          ${twdLine}
+          ${isCardBillPending(item) ? `<div class="record-card-status">信用卡待確認</div>` : ""}
           ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} ${personal ? "個人消費" : "分攤"}：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           <div class="record-actions">
             <button class="mini-btn icon-action-btn" type="button" data-edit-expense="${item.id}" aria-label="修改記帳" title="修改記帳">${ICON_EDIT}</button>
@@ -2284,6 +2463,8 @@
       if (state.filters.category) tags.push(state.filters.category);
       if (state.filters.currency) tags.push(state.filters.currency);
       if (state.filters.payer) tags.push(state.filters.payer === "FUND" ? "支付者：公基金" : `支付者：${state.filters.payer}`);
+      if (state.filters.cardStatus === "pending") tags.push("信用卡：待確認");
+      if (state.filters.cardStatus === "confirmed") tags.push("信用卡：已更新");
       if (state.filters.shareMember) tags.push(`分攤：${state.filters.shareMember}`);
       $("filterSummary").innerHTML = tags.length ? `
         <div class="filter-summary-panel">
@@ -2307,6 +2488,7 @@
       $("filterCategory").value = state.filters.category || "";
       $("filterCurrency").value = state.filters.currency || "";
       $("filterPayer").value = state.filters.payer || "";
+      $("filterCardStatus").value = state.filters.cardStatus || "";
       $("filterShareMember").value = state.filters.shareMember || "";
       $("filterModal").classList.remove("hidden");
     }
@@ -2318,6 +2500,7 @@
         category: $("filterCategory").value,
         currency: $("filterCurrency").value,
         payer: $("filterPayer").value,
+        cardStatus: $("filterCardStatus").value,
         shareMember: $("filterShareMember").value
       };
       $("filterModal").classList.add("hidden");
@@ -2326,7 +2509,7 @@
 
     function clearRecordFilters() {
       state.filters = {};
-      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterShareMember"]
+      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterCardStatus", "filterShareMember"]
         .forEach((id) => { if ($(id)) $(id).value = ""; });
       $("filterModal").classList.add("hidden");
       renderExpenseList();
@@ -3074,7 +3257,7 @@
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripRows), "旅行資料");
 
       const expenseSheetRows = [
-        ["日期", "分類", "備註", "消費類型", "分攤／歸屬成員", "幣別", "金額", "參考台幣", "支付者"],
+        ["日期", "分類", "備註", "消費類型", "分攤／歸屬成員", "幣別", "金額", "參考台幣", "支付者", "付款方式", "信用卡實際台幣"],
         ...state.expenses.map((item) => {
           const personal = isPersonalExpense(item);
           const allocationMembers = personal
@@ -3088,8 +3271,10 @@
             allocationMembers,
             item.currency,
             safeNumber(item.amount),
-            convertToTwd(item.amount, item.currency),
-            item.payer === "FUND" ? "公基金" : (item.payer || "")
+            getExpenseEstimatedTwd(item),
+            item.payer === "FUND" ? "公基金" : (item.payer || ""),
+            item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
+            hasActualCardTwd(item) ? safeNumber(item.actualTwdAmount) : ""
           ];
         })
       ];
@@ -3097,7 +3282,7 @@
       const expenseSheet = XLSX.utils.aoa_to_sheet(expenseSheetRows);
       expenseSheet["!cols"] = [
         { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
-        { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }
+        { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }
       ];
       XLSX.utils.book_append_sheet(wb, expenseSheet, "消費明細");
 
@@ -3319,6 +3504,20 @@
     $("expenseForm").addEventListener("submit", saveExpense);
     $("expenseTypeShared").addEventListener("click", () => setExpenseType(false));
     $("expenseTypePersonal").addEventListener("click", () => setExpenseType(true));
+    $("paymentMethodCash").addEventListener("click", () => { $("expenseActualTwd").value = ""; setPaymentMethod("cash"); });
+    $("paymentMethodCard").addEventListener("click", () => setPaymentMethod("card"));
+    $("expenseAmount").addEventListener("input", () => {
+      if ($("expensePaymentMethod").value === "card" && safeNumber($("expenseActualTwd").value) > 0) $("expenseActualTwd").value = "";
+      updateExpenseTwdPreview();
+      updatePaymentMethodUi();
+    });
+    $("expenseCurrency").addEventListener("change", () => {
+      $("expenseActualTwd").value = "";
+      updateExpenseTwdPreview();
+      updatePaymentMethodUi();
+    });
+    $("expensePayer").addEventListener("change", () => { updatePaymentMethodUi(); if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) { state.selectedPersonalOwner = $("expensePayer").value; renderShareMemberChips(); } });
+    $("expenseActualTwd").addEventListener("input", updatePaymentMethodUi);
     $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
     $("addReceiptBtn").addEventListener("click", () => $("receiptInput").click());
     $("receiptInput").addEventListener("change", (event) => handleReceiptSelection(event.target.files || []));
