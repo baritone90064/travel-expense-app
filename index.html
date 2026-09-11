@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v31：個人消費若歸屬人=支付者則完全排除旅程結算 -->
+  <!-- iPhone 修正版 v33：歷史匯率保留半年、帳務總額與結算介面微調 -->
 
   <style>
     :root {
@@ -402,6 +402,13 @@
       align-items: center; gap: 8px;
     }
     .fund-total-title { grid-column: 1; color: var(--muted); font-size: 12px; }
+    .record-summary.simple-total {
+      grid-template-columns: minmax(108px, 1fr) auto minmax(0, 1fr);
+    }
+    .record-summary.simple-total .fund-total-title {
+      min-width: 108px;
+      white-space: nowrap;
+    }
     .fund-total-values {
       grid-column: 2; display: flex; flex-wrap: wrap; justify-content: center; gap: 7px;
       text-align: center;
@@ -725,9 +732,8 @@
       </section>
 
       <section id="page-settlement" class="page">
-        <div class="section-head"><div><h2>旅程結算</h2><p>依實際付款幣別獨立計算，不用匯率互相抵銷</p></div></div>
+        <div class="section-head"><div><h2>旅程結算</h2></div></div>
         <div class="card soft">
-          <div class="hint" style="margin:0 0 10px">信用卡待確認時先以原始消費幣別結算；補填實際帳單後改以帳單幣別與實際金額結算。</div>
           <button id="calculateSettlementBtn" class="primary-btn full">重新計算結算</button>
         </div>
         <div id="settlementContent"></div>
@@ -893,7 +899,7 @@
     import {
       initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager,
       collection, doc, getDoc, getDocFromCache, getDocFromServer, getDocs, getDocsFromServer,
-      setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit,
+      setDoc, updateDoc, deleteDoc, deleteField, onSnapshot, query, orderBy, limit,
       writeBatch, waitForPendingWrites
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
     import {
@@ -907,6 +913,7 @@
 
     let xlsxModulePromise = null;
     let pdfRenderModulesPromise = null;
+    const EXCHANGE_RATE_RETENTION_DAYS = 183; // 約半年
 
     async function getXlsxModule() {
       if (!xlsxModulePromise) {
@@ -1703,6 +1710,39 @@
       return null;
     }
 
+    function isExchangeRateDateWithinRetention(dateKey) {
+      const cutoff = shiftDateKey(today(), -EXCHANGE_RATE_RETENTION_DAYS);
+      return Boolean(dateKey && cutoff && dateKey >= cutoff);
+    }
+
+    async function pruneExchangeRateHistory() {
+      if (!state.settings?.exchangeRateHistory) return;
+
+      const expiredDates = Object.keys(state.settings.exchangeRateHistory)
+        .filter((dateKey) => !isExchangeRateDateWithinRetention(dateKey));
+
+      if (!expiredDates.length) return;
+
+      expiredDates.forEach((dateKey) => {
+        delete state.settings.exchangeRateHistory[dateKey];
+      });
+
+      if (!navigator.onLine) return;
+
+      try {
+        // Firestore update 一次清除所有超過半年的歷史匯率欄位。
+        const updates = {};
+        expiredDates.forEach((dateKey) => {
+          updates[`exchangeRateHistory.${dateKey}`] = deleteField();
+        });
+        if (Object.keys(updates).length) {
+          await updateDoc(doc(db, "appSettings", "main"), updates);
+        }
+      } catch (error) {
+        console.warn("Historical rate cleanup failed:", error);
+      }
+    }
+
     function shiftDateKey(dateKey, days) {
       const [year, month, day] = String(dateKey || "").split("-").map(Number);
       if (!year || !month || !day) return "";
@@ -1748,6 +1788,11 @@
 
     async function cacheHistoricalRateEntry(requestedDate, entry) {
       if (!state.settings || !requestedDate || !entry?.rates) return;
+
+      // 每筆帳務會另外保存自己的匯率快照，因此全域歷史匯率只保留最近半年，
+      // 避免 appSettings/main 無限成長。
+      if (!isExchangeRateDateWithinRetention(requestedDate)) return;
+
       state.settings.exchangeRateHistory ||= {};
       state.settings.exchangeRateHistory[requestedDate] = entry;
       if (!navigator.onLine) return;
@@ -1807,6 +1852,7 @@
             isFallback: false
           });
         }
+        await pruneExchangeRateHistory();
         return;
       }
       try {
@@ -1829,6 +1875,7 @@
           exchangeRateUpdatedAt: updatedAt,
           [`exchangeRateHistory.${dateKey}`]: historyEntry
         });
+        await pruneExchangeRateHistory();
       } catch (error) {
         console.warn("Exchange rate update failed; using previous rates:", error);
       }
@@ -3139,7 +3186,7 @@
           const fromLabel = payment.from === "公基金" ? "公基金返還" : payment.from;
           return `<div class="settlement-item"><div class="settlement-title">${escapeHtml(fromLabel)} → ${escapeHtml(payment.to)}：${formatMoney(payment.amount, currency)}</div></div>`;
         }).join("") : `<div class="empty">不需要額外付款。</div>`;
-        return `<div class="card"><h3>${currency} 結算</h3><div class="hint">公基金原始餘額：${formatMoney(section.fundBalanceOriginal, currency)}${section.pendingCardCount ? `・${section.pendingCardCount} 筆信用卡待確認，暫以原幣結算` : ""}</div>${peopleRows}<h3 style="margin-top:16px">付款建議</h3>${payments}</div>`;
+        return `<div class="card"><h3>${currency} 結算</h3><div class="hint">公基金餘額：${formatMoney(section.fundBalanceOriginal, currency)}${section.pendingCardCount ? `・${section.pendingCardCount} 筆信用卡待確認，暫以原幣結算` : ""}</div>${peopleRows}<h3 style="margin-top:16px">付款建議</h3>${payments}</div>`;
       }).join("");
       $("settlementContent").innerHTML = html || `<div class="card empty">尚無可結算資料。</div>`;
     }
@@ -3464,7 +3511,6 @@
           if (changed) {
             state.settingsDraftCategories = reordered;
             state.settingsCategoryOrderDirty = true;
-            toast("分類順序已調整；儲存旅程設定後才會生效");
           }
         }
       }
@@ -3899,7 +3945,7 @@
                 const img = document.createElement("img");
                 img.src = dataUrl;
                 img.alt = "收據";
-                img.style.cssText = "width:100%;max-height:260px;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa";
+                img.style.cssText = "display:block;width:auto;height:auto;max-width:100%;max-height:260px;justify-self:center;align-self:start;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa";
                 grid.appendChild(img);
               } catch (error) {
                 receiptLoadFailureCount += 1;
