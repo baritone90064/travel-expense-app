@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v35：PDF 收據圖片放大並提高匯出解析度 -->
+  <!-- iPhone 修正版 v37：信用卡帳單幣別與消費幣別相同時自動帶入消費金額 -->
 
   <style>
     :root {
@@ -535,6 +535,16 @@
     .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .sheet-head h2 { margin: 0; font-size: 20px; }
 
+    .export-scope-note {
+      color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0 0 12px;
+    }
+    .export-scope-count {
+      margin: 0 0 12px; padding: 10px 12px; border-radius: 12px;
+      background: #fff; border: 1px solid var(--line); font-size: 12px; color: var(--text);
+    }
+    .export-scope-actions { display: grid; gap: 10px; }
+    .export-scope-actions button { width: 100%; min-height: 48px; }
+
     .toast {
       position: fixed; z-index: 100; left: 50%; bottom: calc(98px + var(--safe-bottom)); transform: translateX(-50%) translateY(18px);
       width: min(calc(100% - 28px), 500px); background: #253027; color: #fff; border-radius: 14px;
@@ -877,6 +887,27 @@
         <div class="button-row">
           <button id="clearFilterBtn" class="ghost-btn" type="button">清除</button>
           <button id="applyFilterBtn" class="primary-btn" type="button">套用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="exportScopeModal" class="modal-backdrop hidden">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2>選擇匯出範圍</h2>
+        <button id="exportScopeCancelBtn" class="icon-btn" type="button">取消</button>
+      </div>
+      <div class="card">
+        <p class="export-scope-note">
+          是否包含「個人消費且消費歸屬人＝付款人」的紀錄？
+          共同消費，以及由他人或公基金代付的個人消費，不受此選項影響。
+        </p>
+        <div id="exportScopeCount" class="export-scope-count"></div>
+        <div class="export-scope-actions">
+          <button id="exportScopeExcludeBtn" class="primary-btn" type="button">不含本人自付個人消費</button>
+          <button id="exportScopeIncludeBtn" class="ghost-btn" type="button">包含本人自付個人消費</button>
         </div>
       </div>
     </div>
@@ -2009,6 +2040,35 @@
       select.value = current;
     }
 
+    function syncSameCurrencyCardBillAmount(options = {}) {
+      const amountInput = $("expenseAmount");
+      const actualInput = $("expenseActualBillAmount");
+      const expenseCurrency = $("expenseCurrency")?.value || "";
+      const billCurrency = $("expenseBillCurrency")?.value || "";
+      const cardPaid = $("expensePaymentMethod")?.value === "card" && $("expensePayer")?.value !== "FUND";
+
+      if (!amountInput || !actualInput || !cardPaid) return false;
+
+      const sameCurrency = expenseCurrency && billCurrency && expenseCurrency === billCurrency;
+      const amount = safeNumber(amountInput.value);
+
+      if (sameCurrency) {
+        if (amount > 0 && (options.force === true || !String(actualInput.value || "").trim())) {
+          actualInput.value = String(amount);
+          actualInput.dataset.autoFilledFromExpense = "true";
+          return true;
+        }
+        return false;
+      }
+
+      // 切換成不同帳單幣別時，實際帳單金額需重新輸入。
+      if (options.clearWhenDifferent === true) {
+        actualInput.value = "";
+        actualInput.dataset.autoFilledFromExpense = "false";
+      }
+      return false;
+    }
+
     function updatePaymentMethodUi() {
       const payer = $("expensePayer")?.value;
       const cardButton = $("paymentMethodCard");
@@ -2033,6 +2093,7 @@
         return;
       }
       if (!$("expenseBillCurrency").options.length) renderBillCurrencyOptions("TWD");
+      syncSameCurrencyCardBillAmount();
       const actual = safeNumber($("expenseActualBillAmount").value);
       const billCurrency = $("expenseBillCurrency").value || "TWD";
       $("creditCardBillingStatus").textContent = actual > 0
@@ -2326,6 +2387,7 @@
       $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
       renderBillCurrencyOptions(["TWD", "USD"].includes(last?.billCurrency) ? last.billCurrency : "TWD");
       $("expenseActualBillAmount").value = "";
+      $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
       setPaymentMethod($("expensePayer").value === "FUND" ? "cash" : (last?.paymentMethod === "card" ? "card" : "cash"));
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
@@ -2562,6 +2624,7 @@
       $("expensePayer").value = expense.payer;
       renderBillCurrencyOptions(getActualBillCurrency(expense) || expense.billCurrency || "TWD");
       $("expenseActualBillAmount").value = getActualBillAmount(expense) > 0 ? getActualBillAmount(expense) : "";
+      $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
       setPaymentMethod(expense.payer === "FUND" ? "cash" : (expense.paymentMethod === "card" ? "card" : "cash"));
       $("expenseCategory").value = expense.category;
       $("expenseDate").value = expense.date;
@@ -2655,9 +2718,9 @@
       return Boolean(owner) && owner === item.payer;
     }
 
-    function buildCategoryStats(includePersonal) {
+    function buildCategoryStats(includePersonal, sourceExpenses = state.expenses) {
       const totals = {};
-      state.expenses.forEach((item) => {
+      sourceExpenses.forEach((item) => {
         if (!includePersonal && isPersonalExpense(item)) return;
         totals[item.category] ||= { twd: 0, currencies: {} };
         totals[item.category].twd += getExpenseTwdForStats(item);
@@ -2669,11 +2732,11 @@
         .sort((a, b) => b.twd - a.twd);
     }
 
-    function buildMemberStats() {
+    function buildMemberStats(sourceExpenses = state.expenses) {
       const sharedByMember = Object.fromEntries(state.trip.members.map((member) => [member, 0]));
       const personalByMember = Object.fromEntries(state.trip.members.map((member) => [member, 0]));
 
-      state.expenses.forEach((item) => {
+      sourceExpenses.forEach((item) => {
         const twd = getExpenseTwdForStats(item);
         if (isPersonalExpense(item)) {
           const owner = getPersonalExpenseOwner(item);
@@ -3843,6 +3906,42 @@
       throw new Error(`收據圖片無法下載；請檢查 Firebase Storage CORS。${detail ? ` (${detail})` : ""}`);
     }
 
+    let exportScopeResolver = null;
+
+    function getExportExpenses(includeSelfPaidPersonal) {
+      return state.expenses.filter((item) =>
+        includeSelfPaidPersonal || !excludeSelfPaidPersonalFromSettlement(item)
+      );
+    }
+
+    function finishExportScopeChoice(value) {
+      $("exportScopeModal")?.classList.add("hidden");
+      const resolver = exportScopeResolver;
+      exportScopeResolver = null;
+      if (resolver) resolver(value);
+    }
+
+    function chooseExportPersonalScope() {
+      if (exportScopeResolver) finishExportScopeChoice(null);
+
+      const selfPaidCount = state.expenses.filter((item) =>
+        excludeSelfPaidPersonalFromSettlement(item)
+      ).length;
+
+      const countEl = $("exportScopeCount");
+      if (countEl) {
+        countEl.textContent = selfPaidCount
+          ? `本旅程共有 ${selfPaidCount} 筆「本人自付個人消費」。`
+          : "本旅程目前沒有「本人自付個人消費」。";
+      }
+
+      $("exportScopeModal")?.classList.remove("hidden");
+
+      return new Promise((resolve) => {
+        exportScopeResolver = resolve;
+      });
+    }
+
     function pdfMoneyLine(item) {
       if (hasActualCardBill(item)) {
         const currency = getActualBillCurrency(item);
@@ -3853,12 +3952,12 @@
       return estimated > 0 ? `預估折合 約 ${formatMoney(estimated, "TWD")}` : "預估折合：暫無匯率";
     }
 
-    async function buildPdfReportElement() {
+    async function buildPdfReportElement(exportExpenses = state.expenses) {
       const report = document.createElement("div");
       let receiptLoadFailureCount = 0;
       report.style.cssText = [
         "width:760px",
-        "padding:28px",
+        "padding:14px",
         "background:#fff",
         "color:#1e2823",
         "font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC',sans-serif",
@@ -3867,11 +3966,11 @@
       ].join(";");
 
       const settlement = calculateSettlementData();
-      const categoryStats = buildCategoryStats(false);
-      const memberStats = buildMemberStats();
-      const sharedTwd = state.expenses.reduce((sum, item) =>
+      const categoryStats = buildCategoryStats(false, exportExpenses);
+      const memberStats = buildMemberStats(exportExpenses);
+      const sharedTwd = exportExpenses.reduce((sum, item) =>
         sum + (isPersonalExpense(item) ? 0 : getExpenseTwdForStats(item)), 0);
-      const personalTwd = state.expenses.reduce((sum, item) =>
+      const personalTwd = exportExpenses.reduce((sum, item) =>
         sum + (isPersonalExpense(item) ? getExpenseTwdForStats(item) : 0), 0);
 
       const memberHtml = memberStats.map((row) => `
@@ -3894,11 +3993,17 @@
         </tr>`;
       }).join("");
 
-      const settlementHtml = Object.entries(settlement).map(([currency, section]) => {
+      const settlementHtml = Object.entries(settlement)
+        .sort(([currencyA], [currencyB]) => {
+          if (currencyA === "TWD") return -1;
+          if (currencyB === "TWD") return 1;
+          return currencyA.localeCompare(currencyB);
+        })
+        .map(([currency, section]) => {
         const paymentRows = section.payments.length
           ? section.payments.map((payment) => `<div style="padding:4px 0">${escapeHtml(payment.from === "公基金" ? "公基金返還" : payment.from)} → ${escapeHtml(payment.to)}：<strong>${formatMoney(payment.amount, currency)}</strong></div>`).join("")
           : `<div style="color:#778078">不需要額外付款</div>`;
-        return `<div style="margin:8px 0 14px;break-inside:avoid">
+        return `<div style="min-width:0;padding:10px 12px;border:1px solid #e7e2d6;border-radius:10px;break-inside:avoid">
           <div style="font-weight:800;margin-bottom:4px">${escapeHtml(currency)} 結算</div>
           ${section.pendingCardCount ? `<div style="font-size:11px;color:#a46b18;margin-bottom:4px">${section.pendingCardCount} 筆信用卡待確認，暫以原幣計算</div>` : ""}
           ${paymentRows}
@@ -3925,11 +4030,13 @@
           <tbody>${categoryHtml || `<tr><td>尚無資料</td></tr>`}</tbody>
         </table>
         <h2 style="font-size:17px;margin:18px 0 8px">旅程結算</h2>
-        ${settlementHtml || `<div style="color:#778078">尚無結算資料</div>`}
+        ${settlementHtml
+          ? `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start">${settlementHtml}</div>`
+          : `<div style="color:#778078">尚無結算資料</div>`}
         <div style="break-before:page;margin-top:22px"><h2 style="font-size:19px;margin:0 0 12px">帳務明細與收據</h2></div>
       `;
 
-      const expenses = [...state.expenses].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")));
+      const expenses = [...exportExpenses].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")));
 
       async function appendPdfExpenseGroup(title, items, startOnNewPage = false) {
         const heading = document.createElement("div");
@@ -3974,14 +4081,14 @@
           const attachments = (item.attachments || []).filter((x) => x.storagePath);
           if (attachments.length) {
             const grid = document.createElement("div");
-            grid.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:12px";
+            grid.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:flex-start;justify-content:flex-start";
             for (const attachment of attachments) {
               try {
                 const dataUrl = await getAttachmentDataUrl(attachment.storagePath);
                 const img = document.createElement("img");
                 img.src = dataUrl;
                 img.alt = "收據";
-                img.style.cssText = "display:block;width:auto;height:auto;max-width:100%;max-height:420px;justify-self:center;align-self:start;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa;padding:4px";
+                img.style.cssText = "display:block;width:auto;height:360px;max-width:100%;max-height:420px;flex:0 1 auto;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa;padding:4px;box-sizing:border-box";
                 grid.appendChild(img);
               } catch (error) {
                 receiptLoadFailureCount += 1;
@@ -4037,7 +4144,7 @@
       page.style.cssText = [
         "width:760px",
         "box-sizing:border-box",
-        "padding:28px",
+        "padding:12px",
         "background:#fff",
         "color:#1e2823",
         "font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC',sans-serif",
@@ -4091,10 +4198,15 @@
 
     async function exportPdfReport() {
       if (!state.trip) return;
-      if (state.expenses.some((item) => safeNumber(item.pendingAttachmentCount) > 0)) {
+
+      const includeSelfPaidPersonal = await chooseExportPersonalScope();
+      if (includeSelfPaidPersonal === null) return;
+      const exportExpenses = getExportExpenses(includeSelfPaidPersonal);
+
+      if (exportExpenses.some((item) => safeNumber(item.pendingAttachmentCount) > 0)) {
         return toast("仍有收據等待上傳，請先連線完成同步再匯出 PDF");
       }
-      if (!navigator.onLine && state.expenses.some((item) => (item.attachments || []).length)) {
+      if (!navigator.onLine && exportExpenses.some((item) => (item.attachments || []).length)) {
         return toast("PDF 含收據圖片需要網路，請連線後再匯出");
       }
 
@@ -4108,7 +4220,7 @@
       let loadingCover = null;
       try {
         const { html2canvas, jsPDF } = await getPdfRenderModules();
-        report = await buildPdfReportElement();
+        report = await buildPdfReportElement(exportExpenses);
 
         const receiptFailureCount = safeNumber(report.dataset.receiptLoadFailureCount);
         if (receiptFailureCount > 0) {
@@ -4159,7 +4271,7 @@
         const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 8;
+        const margin = 4;
         const usableWidth = pageWidth - margin * 2;
         const usableHeight = pageHeight - margin * 2;
 
@@ -4209,6 +4321,11 @@
 
     async function exportWorkbook() {
       if (!state.trip) return;
+
+      const includeSelfPaidPersonal = await chooseExportPersonalScope();
+      if (includeSelfPaidPersonal === null) return;
+      const exportExpenses = getExportExpenses(includeSelfPaidPersonal);
+
       let XLSX;
       try {
         XLSX = await getXlsxModule();
@@ -4263,8 +4380,8 @@
         XLSX.utils.book_append_sheet(wb, sheet, name);
       };
 
-      appendExpenseSheet("共同消費", state.expenses.filter((item) => !isPersonalExpense(item)));
-      appendExpenseSheet("個人消費", state.expenses.filter((item) => isPersonalExpense(item)));
+      appendExpenseSheet("共同消費", exportExpenses.filter((item) => !isPersonalExpense(item)));
+      appendExpenseSheet("個人消費", exportExpenses.filter((item) => isPersonalExpense(item)));
 
       const fundRows = state.funds.map((item) => [
         item.date,
@@ -4293,9 +4410,9 @@
 
       const statsCurrencies = [...new Set([
         ...(state.trip.enabledCurrencies || []),
-        ...state.expenses.map((item) => item.currency)
+        ...exportExpenses.map((item) => item.currency)
       ])].filter(Boolean);
-      const memberStats = buildMemberStats();
+      const memberStats = buildMemberStats(exportExpenses);
 
       const statsRows = [];
       const appendCategorySection = (title, rows) => {
@@ -4315,8 +4432,8 @@
         statsRows.push([]);
       };
 
-      appendCategorySection("依分類－僅共同消費", buildCategoryStats(false));
-      appendCategorySection("依分類－包含個人消費", buildCategoryStats(true));
+      appendCategorySection("依分類－僅共同消費", buildCategoryStats(false, exportExpenses));
+      appendCategorySection("依分類－包含個人消費", buildCategoryStats(true, exportExpenses));
       statsRows.push(["依成員消費"]);
       statsRows.push(["成員", "共同分攤（參考台幣）", "個人消費（參考台幣）", "合計（參考台幣）"]);
       const memberStatsRows = memberStats
@@ -4484,23 +4601,48 @@
     $("expenseForm").addEventListener("submit", saveExpense);
     $("expenseTypeShared").addEventListener("click", () => setExpenseType(false));
     $("expenseTypePersonal").addEventListener("click", () => setExpenseType(true));
-    $("paymentMethodCash").addEventListener("click", () => { $("expenseActualBillAmount").value = ""; setPaymentMethod("cash"); });
-    $("paymentMethodCard").addEventListener("click", () => setPaymentMethod("card"));
+    $("paymentMethodCash").addEventListener("click", () => {
+      $("expenseActualBillAmount").value = "";
+      $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+      setPaymentMethod("cash");
+    });
+    $("paymentMethodCard").addEventListener("click", () => {
+      setPaymentMethod("card");
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      updatePaymentMethodUi();
+    });
     $("expenseAmount").addEventListener("input", () => {
-      if ($("expensePaymentMethod").value === "card" && safeNumber($("expenseActualBillAmount").value) > 0) $("expenseActualBillAmount").value = "";
+      if ($("expensePaymentMethod").value === "card") {
+        const sameCurrency = $("expenseCurrency").value === $("expenseBillCurrency").value;
+        if (sameCurrency) {
+          syncSameCurrencyCardBillAmount({ force: true });
+        } else {
+          $("expenseActualBillAmount").value = "";
+          $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+        }
+      }
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expenseCurrency").addEventListener("change", () => {
-      $("expenseActualBillAmount").value = "";
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expenseDate").addEventListener("change", updateExpenseTwdPreview);
-    $("expensePayer").addEventListener("change", () => { updatePaymentMethodUi(); if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) { state.selectedPersonalOwner = $("expensePayer").value; renderShareMemberChips(); } });
-    $("expenseActualBillAmount").addEventListener("input", updatePaymentMethodUi);
+    $("expensePayer").addEventListener("change", () => {
+      updatePaymentMethodUi();
+      if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) {
+        state.selectedPersonalOwner = $("expensePayer").value;
+        renderShareMemberChips();
+      }
+    });
+    $("expenseActualBillAmount").addEventListener("input", () => {
+      $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+      updatePaymentMethodUi();
+    });
     $("expenseBillCurrency").addEventListener("change", () => {
-      $("expenseActualBillAmount").value = "";
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
       updatePaymentMethodUi();
     });
     $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
@@ -4522,6 +4664,12 @@
       if (event.target === $("imageViewer")) closeAttachmentViewer();
     });
     $("closeFilterBtn").addEventListener("click", () => $("filterModal").classList.add("hidden"));
+    $("exportScopeExcludeBtn").addEventListener("click", () => finishExportScopeChoice(false));
+    $("exportScopeIncludeBtn").addEventListener("click", () => finishExportScopeChoice(true));
+    $("exportScopeCancelBtn").addEventListener("click", () => finishExportScopeChoice(null));
+    $("exportScopeModal").addEventListener("click", (event) => {
+      if (event.target === $("exportScopeModal")) finishExportScopeChoice(null);
+    });
     $("applyFilterBtn").addEventListener("click", applyFilter);
     $("clearFilterBtn").addEventListener("click", clearRecordFilters);
     $("calculateSettlementBtn").addEventListener("click", saveSettlement);
