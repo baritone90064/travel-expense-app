@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v37：信用卡帳單幣別與消費幣別相同時自動帶入消費金額 -->
+  <!-- iPhone 修正版 v38：PDF 匯出若無個人消費資料則完全隱藏個人消費區塊 -->
 
   <style>
     :root {
@@ -4108,7 +4108,12 @@
       const sharedExpenses = expenses.filter((item) => !isPersonalExpense(item));
       const personalExpenses = expenses.filter((item) => isPersonalExpense(item));
       await appendPdfExpenseGroup("共同消費明細與收據", sharedExpenses, false);
-      await appendPdfExpenseGroup("個人消費明細與收據", personalExpenses, true);
+
+      // 匯出範圍若已排除所有個人消費，就不要再輸出
+      // 「個人消費明細與收據 / 尚無資料」這個空白區塊。
+      if (personalExpenses.length) {
+        await appendPdfExpenseGroup("個人消費明細與收據", personalExpenses, true);
+      }
 
       const footer = document.createElement("div");
       footer.style.cssText = "margin-top:18px;padding-top:10px;border-top:1px solid #ddd;color:#778078;font-size:10px";
