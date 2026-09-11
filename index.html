@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v33：歷史匯率保留半年、帳務總額與結算介面微調 -->
+  <!-- iPhone 修正版 v35：PDF 收據圖片放大並提高匯出解析度 -->
 
   <style>
     :root {
@@ -3163,15 +3163,51 @@
 
     async function saveSettlement() {
       if (!(await confirmServerBeforeWrite())) return;
-      const results = calculateSettlementData();
-      const data = {
-        calculatedAt: new Date().toISOString(),
-        results
-      };
-      await setDoc(doc(db, "trips", state.currentTripId, "settlements", "latest"), data);
-      state.settlement = data;
-      renderSettlement();
-      toast("結算已更新");
+
+      const button = $("calculateSettlementBtn");
+      const originalText = button?.textContent || "重新計算結算";
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "計算中…";
+      }
+
+      try {
+        const results = calculateSettlementData();
+        const data = {
+          calculatedAt: new Date().toISOString(),
+          results
+        };
+
+        await setDoc(doc(db, "trips", state.currentTripId, "settlements", "latest"), data);
+        state.settlement = data;
+        renderSettlement();
+
+        if (button) {
+          button.textContent = "✓ 已重新結算完成";
+        }
+        toast("已重新結算完成");
+
+        window.setTimeout(() => {
+          if (button) {
+            button.textContent = originalText;
+            button.disabled = false;
+          }
+        }, 1800);
+      } catch (error) {
+        console.error("Settlement recalculation failed:", error);
+        if (button) {
+          button.textContent = "重新結算失敗";
+        }
+        toast("重新結算失敗，請確認網路後重試");
+
+        window.setTimeout(() => {
+          if (button) {
+            button.textContent = originalText;
+            button.disabled = false;
+          }
+        }, 1800);
+      }
     }
 
     function renderSettlement() {
@@ -3938,14 +3974,14 @@
           const attachments = (item.attachments || []).filter((x) => x.storagePath);
           if (attachments.length) {
             const grid = document.createElement("div");
-            grid.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px";
+            grid.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:12px";
             for (const attachment of attachments) {
               try {
                 const dataUrl = await getAttachmentDataUrl(attachment.storagePath);
                 const img = document.createElement("img");
                 img.src = dataUrl;
                 img.alt = "收據";
-                img.style.cssText = "display:block;width:auto;height:auto;max-width:100%;max-height:260px;justify-self:center;align-self:start;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa";
+                img.style.cssText = "display:block;width:auto;height:auto;max-width:100%;max-height:420px;justify-self:center;align-self:start;object-fit:contain;border:1px solid #eee;border-radius:8px;background:#fafafa;padding:4px";
                 grid.appendChild(img);
               } catch (error) {
                 receiptLoadFailureCount += 1;
@@ -4046,6 +4082,13 @@
       return pages.filter((item) => item.children.length);
     }
 
+    function getPdfCanvasScale() {
+      // 提高 PDF 清晰度，尤其是收據與截圖上的小字。
+      // iPhone 常見 devicePixelRatio 會到 3，這裡做上限避免 PDF 過大或轉檔太慢。
+      const dpr = window.devicePixelRatio || 1;
+      return Math.min(2.4, Math.max(2, dpr));
+    }
+
     async function exportPdfReport() {
       if (!state.trip) return;
       if (state.expenses.some((item) => safeNumber(item.pendingAttachmentCount) > 0)) {
@@ -4125,7 +4168,7 @@
             button.querySelector(".more-title").textContent = `產生 PDF ${index + 1}/${pages.length}`;
           }
           const canvas = await html2canvas(pages[index], {
-            scale: 1.25,
+            scale: getPdfCanvasScale(),
             useCORS: true,
             allowTaint: false,
             backgroundColor: "#ffffff",
@@ -4135,12 +4178,12 @@
             windowWidth: 760
           });
           if (!canvas.width || !canvas.height) throw new Error("PDF 頁面轉換失敗");
-          const imageData = canvas.toDataURL("image/jpeg", 0.9);
+          const imageData = canvas.toDataURL("image/png");
           const ratio = Math.min(usableWidth / canvas.width, usableHeight / canvas.height);
           const drawWidth = canvas.width * ratio;
           const drawHeight = canvas.height * ratio;
           if (index > 0) pdf.addPage();
-          pdf.addImage(imageData, "JPEG", margin, margin, drawWidth, drawHeight, undefined, "FAST");
+          pdf.addImage(imageData, "PNG", margin, margin, drawWidth, drawHeight, undefined, "SLOW");
           canvas.width = 1;
           canvas.height = 1;
         }
