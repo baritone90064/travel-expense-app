@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v48：Excel 各消費工作表新增成員摘要，並完整支援含／不含個人消費匯出 -->
+  <!-- iPhone 修正版 v49：Excel 匯出檔名區分是否包含個人消費 -->
 
   <style>
     :root {
@@ -5229,7 +5229,9 @@
       applyExcelNumberFormat(settlementSheet);
       XLSX.utils.book_append_sheet(wb, settlementSheet, "結算");
 
-      const filename = `${state.trip.name || "旅行記帳"}_${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+      const exportScopeLabel = includePersonalExpenses ? "含個人消費" : "不含個人消費";
+      const filename = `${state.trip.name || "旅行記帳"}_${exportScopeLabel}_${today()}.xlsx`
+        .replace(/[\\/:*?"<>|]/g, "-");
       XLSX.writeFile(wb, filename, { cellStyles: true });
       toast("Excel 已匯出");
     }
