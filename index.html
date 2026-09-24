@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v38：PDF 匯出若無個人消費資料則完全隱藏個人消費區塊 -->
+  <!-- iPhone 修正版 v40：統計分析新增依成員分類消費圖表 -->
 
   <style>
     :root {
@@ -297,6 +297,40 @@
     .stats-member-total { min-width: 0; text-align: right; }
     .stats-member-total-value { margin-top: 4px; font-size: 14px; font-weight: 900; white-space: nowrap; }
 
+    .member-category-chart-list { display: grid; gap: 16px; }
+    .member-category-chart-card {
+      border: 1px solid var(--line); border-radius: 16px; background: #fcfbf8;
+      padding: 14px 14px 12px;
+    }
+    .member-category-chart-head {
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 8px;
+      margin-bottom: 10px;
+    }
+    .member-category-chart-name { font-size: 15px; font-weight: 850; }
+    .member-category-chart-total {
+      color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .member-category-chart-bar {
+      display: flex; overflow: hidden; width: 100%; height: 16px;
+      border-radius: 999px; background: #ece8dc; margin-bottom: 10px;
+    }
+    .member-category-chart-segment { height: 100%; min-width: 2px; }
+    .member-category-chart-items { display: grid; gap: 8px; }
+    .member-category-chart-item {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px;
+      align-items: center;
+    }
+    .member-category-chart-dot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 10px; }
+    .member-category-chart-label {
+      min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+      font-size: 12px; line-height: 1.4;
+    }
+    .member-category-chart-label strong { font-size: 12px; }
+    .member-category-chart-percent { color: var(--muted); font-size: 11px; }
+    .member-category-chart-amount {
+      text-align: right; font-size: 12px; font-weight: 800; white-space: nowrap;
+    }
+
     .settlement-item { padding: 11px 0; border-bottom: 1px dashed var(--line); }
     .settlement-item:last-child { border-bottom: 0; }
     .settlement-title { font-size: 14px; font-weight: 850; }
@@ -579,6 +613,9 @@
       .stats-member-line { gap: 1em; font-size: 10px; }
       .stats-member-line strong { font-size: inherit; }
       .stats-member-total-value { font-size: 12px; }
+      .member-category-chart-card { padding: 12px; }
+      .member-category-chart-item { grid-template-columns: auto minmax(0, 1fr); }
+      .member-category-chart-amount { grid-column: 2; padding-left: 18px; text-align: left; }
     }
 
     @media (min-width: 720px) {
@@ -879,11 +916,19 @@
           <div class="field"><label for="filterStartDate">開始日期</label><input id="filterStartDate" type="date" /></div>
           <div class="field"><label for="filterEndDate">結束日期</label><input id="filterEndDate" type="date" /></div>
         </div>
+        <div class="field">
+          <label for="filterKeyword">關鍵字</label>
+          <input id="filterKeyword" type="search" maxlength="80" placeholder="搜尋分類、備註、支付者、成員…" autocomplete="off" />
+        </div>
         <div class="field"><label for="filterCategory">分類</label><select id="filterCategory"></select></div>
         <div class="field"><label for="filterCurrency">幣別</label><select id="filterCurrency"></select></div>
         <div class="field"><label for="filterPayer">支付者</label><select id="filterPayer"></select></div>
         <div class="field"><label for="filterCardStatus">信用卡帳單</label><select id="filterCardStatus"><option value="">全部</option><option value="pending">待確認實際台幣</option><option value="confirmed">已更新實際台幣</option></select></div>
-        <div class="field"><label for="filterShareMember">分攤／消費歸屬成員</label><select id="filterShareMember"></select></div>
+        <div class="field">
+          <label>分攤／消費歸屬成員</label>
+          <div id="filterShareMemberChips" class="chips" aria-label="篩選分攤或消費歸屬成員"></div>
+          <div class="hint">可複選；選 2 人以上時，共同消費會篩出「分攤成員剛好為所選成員」的紀錄。</div>
+        </div>
         <div class="button-row">
           <button id="clearFilterBtn" class="ghost-btn" type="button">清除</button>
           <button id="applyFilterBtn" class="primary-btn" type="button">套用</button>
@@ -2663,20 +2708,59 @@
       }
     }
 
+    function getExpenseKeywordText(item) {
+      const payerText = item.payer === "FUND" ? "公基金" : (item.payer || "");
+      const owner = isPersonalExpense(item) ? getPersonalExpenseOwner(item) : "";
+      const members = uniqueTextList(item.shareMemberIds, []);
+      const paymentText = isCreditCardExpense(item) ? "信用卡" : "現金";
+      const typeText = isPersonalExpense(item) ? "個人消費" : "共同消費";
+      return [
+        item.date, item.category, item.note, item.currency, item.amount,
+        payerText, owner, ...members, paymentText, typeText,
+        item.billCurrency, getActualBillAmount(item)
+      ].filter((value) => value !== undefined && value !== null && String(value).trim())
+        .join(" ")
+        .toLocaleLowerCase("zh-TW");
+    }
+
     function getFilteredExpenses() {
-      const f = state.filters;
+      const f = state.filters || {};
+      const keyword = String(f.keyword || "").trim().toLocaleLowerCase("zh-TW");
+      const selectedMembers = uniqueTextList(
+        Array.isArray(f.shareMembers) ? f.shareMembers : (f.shareMember ? [f.shareMember] : []),
+        []
+      );
+
       return state.expenses.filter((item) => {
         if (f.startDate && item.date < f.startDate) return false;
         if (f.endDate && item.date > f.endDate) return false;
+        if (keyword && !getExpenseKeywordText(item).includes(keyword)) return false;
         if (f.category && item.category !== f.category) return false;
         if (f.currency && item.currency !== f.currency) return false;
         if (f.payer && item.payer !== f.payer) return false;
         if (f.cardStatus === "pending" && !isCardBillPending(item)) return false;
         if (f.cardStatus === "confirmed" && !(isCreditCardExpense(item) && hasActualCardBill(item))) return false;
-        if (f.shareMember) {
+
+        if (selectedMembers.length) {
           if (isPersonalExpense(item)) {
-            if (getPersonalExpenseOwner(item) !== f.shareMember) return false;
-          } else if (!(item.shareMemberIds || []).includes(f.shareMember)) return false;
+            // 個人消費只有一位歸屬人：複選時顯示任一所選成員的個人消費。
+            if (!selectedMembers.includes(getPersonalExpenseOwner(item))) return false;
+          } else {
+            const itemMembers = uniqueTextList(item.shareMemberIds, [])
+              .filter((member) => state.trip.members.includes(member));
+
+            if (selectedMembers.length === 1) {
+              // 單選維持原本行為：只要該人有參與分攤就顯示。
+              if (!itemMembers.includes(selectedMembers[0])) return false;
+            } else {
+              // 複選 2 人以上：用「完全相同的分攤組合」篩選。
+              const selectedSet = new Set(selectedMembers);
+              if (itemMembers.length !== selectedMembers.length ||
+                  !itemMembers.every((member) => selectedSet.has(member))) {
+                return false;
+              }
+            }
+          }
         }
         return true;
       });
@@ -2762,6 +2846,60 @@
         .sort((a, b) => b.total - a.total);
     }
 
+    function buildMemberCategoryStats(sourceExpenses = state.expenses) {
+      const categoryMapByMember = Object.fromEntries(
+        state.trip.members.map((member) => [member, {}])
+      );
+
+      sourceExpenses.forEach((item) => {
+        const twd = getExpenseTwdForStats(item);
+        if (twd <= 0) return;
+        const category = item.category || "未分類";
+
+        if (isPersonalExpense(item)) {
+          const owner = getPersonalExpenseOwner(item);
+          if (!owner || !categoryMapByMember[owner]) return;
+          categoryMapByMember[owner][category] =
+            safeNumber(categoryMapByMember[owner][category]) + twd;
+          return;
+        }
+
+        const members = uniqueTextList(item.shareMemberIds, state.trip.members)
+          .filter((member) => state.trip.members.includes(member));
+        if (!members.length) return;
+        const each = twd / members.length;
+        members.forEach((member) => {
+          categoryMapByMember[member][category] =
+            safeNumber(categoryMapByMember[member][category]) + each;
+        });
+      });
+
+      return state.trip.members.map((member) => {
+        const categories = Object.entries(categoryMapByMember[member])
+          .map(([category, twd]) => ({ category, twd: safeNumber(twd) }))
+          .filter((row) => row.twd > 0)
+          .sort((a, b) => b.twd - a.twd);
+
+        const total = categories.reduce((sum, row) => sum + row.twd, 0);
+        return {
+          member,
+          total,
+          categories: categories.map((row) => ({
+            ...row,
+            percent: total > 0 ? (row.twd / total) * 100 : 0
+          }))
+        };
+      }).sort((a, b) => b.total - a.total);
+    }
+
+    function getMemberCategoryChartColor(index) {
+      const colors = [
+        "#7b8d3b", "#b5823d", "#6d8b74", "#9b6b6b", "#6b7fa8",
+        "#a27f52", "#8a6c99", "#668f99", "#b16f57", "#7f8a55"
+      ];
+      return colors[index % colors.length];
+    }
+
     function sumAmountsByCurrency(items, selector) {
       const totals = {};
       items.forEach((item) => {
@@ -2781,7 +2919,10 @@
     }
 
     function hasActiveRecordFilters() {
-      return Object.values(state.filters || {}).some(Boolean);
+      const filters = state.filters || {};
+      return Object.entries(filters).some(([, value]) =>
+        Array.isArray(value) ? value.length > 0 : Boolean(value)
+      );
     }
 
     function renderRecordSortButton() {
@@ -2797,14 +2938,19 @@
 
     function renderRecordTotals(items) {
       const container = $("recordTotals");
-      const selectedMember = state.filters.shareMember;
+      const selectedMembers = uniqueTextList(
+        Array.isArray(state.filters.shareMembers)
+          ? state.filters.shareMembers
+          : (state.filters.shareMember ? [state.filters.shareMember] : []),
+        []
+      );
       const filtered = hasActiveRecordFilters();
-      // 未篩選時只顯示共同消費；套用篩選後則顯示篩選到的全部金額，
-      // 讓使用者能透過成員等條件查看個人消費。
+      // 未篩選時只顯示共同消費；套用篩選後則顯示篩選到的全部金額。
       const grossTotals = sumAmountsByCurrency(items, (item) => (!filtered && isPersonalExpense(item)) ? 0 : item.amount);
-      const memberTotals = selectedMember
-        ? sumAmountsByCurrency(items, (item) => getExpenseShareAmount(item, selectedMember))
-        : null;
+      const memberTotals = selectedMembers.map((member) => ({
+        member,
+        totals: sumAmountsByCurrency(items, (item) => getExpenseShareAmount(item, member))
+      }));
 
       container.classList.toggle("simple-total", !filtered);
       if (!filtered) {
@@ -2824,12 +2970,16 @@
           <div class="record-summary-title">篩選結果</div>
           <div class="record-summary-count">${items.length} 筆</div>
         </div>
-        <div class="record-summary-grid ${selectedMember ? "two" : ""}">
+        <div class="record-summary-grid ${memberTotals.length ? "two" : ""}">
           <div class="record-summary-block">
             <div class="record-summary-label">篩選消費總額</div>
             <div class="record-summary-values">${renderAmountValues(grossTotals)}</div>
           </div>
-          ${selectedMember ? `<div class="record-summary-block"><div class="record-summary-label">${escapeHtml(selectedMember)} 個人總消費額</div><div class="record-summary-values">${renderAmountValues(memberTotals)}</div></div>` : ""}
+          ${memberTotals.map(({ member, totals }) => `
+            <div class="record-summary-block">
+              <div class="record-summary-label">${escapeHtml(member)} 個人總消費額</div>
+              <div class="record-summary-values">${renderAmountValues(totals)}</div>
+            </div>`).join("")}
         </div>`;
     }
 
@@ -2906,12 +3056,19 @@
 
       const tags = [];
       if (state.filters.startDate || state.filters.endDate) tags.push(`${state.filters.startDate || "不限"}～${state.filters.endDate || "不限"}`);
+      if (state.filters.keyword) tags.push(`關鍵字：${state.filters.keyword}`);
       if (state.filters.category) tags.push(state.filters.category);
       if (state.filters.currency) tags.push(state.filters.currency);
       if (state.filters.payer) tags.push(state.filters.payer === "FUND" ? "支付者：公基金" : `支付者：${state.filters.payer}`);
       if (state.filters.cardStatus === "pending") tags.push("信用卡：待確認");
       if (state.filters.cardStatus === "confirmed") tags.push("信用卡：已更新");
-      if (state.filters.shareMember) tags.push(`分攤：${state.filters.shareMember}`);
+      const filterMembers = uniqueTextList(
+        Array.isArray(state.filters.shareMembers)
+          ? state.filters.shareMembers
+          : (state.filters.shareMember ? [state.filters.shareMember] : []),
+        []
+      );
+      if (filterMembers.length) tags.push(`分攤／歸屬：${filterMembers.join("、")}`);
       $("filterSummary").innerHTML = tags.length ? `
         <div class="filter-summary-panel">
           <div class="filter-summary-tags">${tags.map((tag) => `<span class="filter-tag">${escapeHtml(tag)}</span>`).join("")}</div>
@@ -2920,34 +3077,59 @@
       hydrateAttachmentImages($("expenseList"));
     }
 
+    function renderFilterMemberChips(selectedMembers = []) {
+      if (!state.trip) return;
+      const selected = new Set(uniqueTextList(selectedMembers, []));
+      $("filterShareMemberChips").innerHTML = state.trip.members.map((member) => {
+        const active = selected.has(member);
+        return `<button type="button" class="chip ${active ? "active" : ""}" data-filter-share-member="${escapeHtml(member)}" aria-pressed="${active}">${escapeHtml(member)}</button>`;
+      }).join("");
+    }
+
     function renderFilterOptions() {
       if (!state.trip) return;
       $("filterCategory").innerHTML = `<option value="">全部分類</option>` + state.trip.categories.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
       $("filterCurrency").innerHTML = `<option value="">全部幣別</option>` + state.trip.enabledCurrencies.map((v) => `<option value="${v}">${v}</option>`).join("");
       $("filterPayer").innerHTML = `<option value="">全部支付者</option><option value="FUND">公基金</option>` + state.trip.members.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
-      $("filterShareMember").innerHTML = `<option value="">全部成員</option>` + state.trip.members.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+      renderFilterMemberChips(
+        Array.isArray(state.filters.shareMembers)
+          ? state.filters.shareMembers
+          : (state.filters.shareMember ? [state.filters.shareMember] : [])
+      );
     }
 
     function openFilter() {
       $("filterStartDate").value = state.filters.startDate || "";
       $("filterEndDate").value = state.filters.endDate || "";
+      $("filterKeyword").value = state.filters.keyword || "";
       $("filterCategory").value = state.filters.category || "";
       $("filterCurrency").value = state.filters.currency || "";
       $("filterPayer").value = state.filters.payer || "";
       $("filterCardStatus").value = state.filters.cardStatus || "";
-      $("filterShareMember").value = state.filters.shareMember || "";
+      renderFilterMemberChips(
+        Array.isArray(state.filters.shareMembers)
+          ? state.filters.shareMembers
+          : (state.filters.shareMember ? [state.filters.shareMember] : [])
+      );
       $("filterModal").classList.remove("hidden");
+    }
+
+    function getFilterMemberSelectionsFromUi() {
+      return [...$("filterShareMemberChips").querySelectorAll("[data-filter-share-member].active")]
+        .map((button) => button.dataset.filterShareMember)
+        .filter(Boolean);
     }
 
     function applyFilter() {
       state.filters = {
         startDate: $("filterStartDate").value,
         endDate: $("filterEndDate").value,
+        keyword: $("filterKeyword").value.trim(),
         category: $("filterCategory").value,
         currency: $("filterCurrency").value,
         payer: $("filterPayer").value,
         cardStatus: $("filterCardStatus").value,
-        shareMember: $("filterShareMember").value
+        shareMembers: getFilterMemberSelectionsFromUi()
       };
       $("filterModal").classList.add("hidden");
       renderExpenseList();
@@ -2955,8 +3137,9 @@
 
     function clearRecordFilters() {
       state.filters = {};
-      ["filterStartDate", "filterEndDate", "filterCategory", "filterCurrency", "filterPayer", "filterCardStatus", "filterShareMember"]
+      ["filterStartDate", "filterEndDate", "filterKeyword", "filterCategory", "filterCurrency", "filterPayer", "filterCardStatus"]
         .forEach((id) => { if ($(id)) $(id).value = ""; });
+      renderFilterMemberChips([]);
       $("filterModal").classList.add("hidden");
       renderExpenseList();
     }
@@ -3325,6 +3508,37 @@
         </div>`)
         .join("");
 
+      const memberCategoryCharts = buildMemberCategoryStats()
+        .map(({ member, total, categories }) => {
+          const barHtml = categories.map((row, index) => {
+            const width = Math.max(row.percent, 2);
+            return `<div class="member-category-chart-segment" style="width:${width}%;background:${getMemberCategoryChartColor(index)}" title="${escapeHtml(row.category)} ${row.percent.toFixed(1)}%"></div>`;
+          }).join("");
+
+          const itemHtml = categories.map((row, index) => `
+            <div class="member-category-chart-item">
+              <span class="member-category-chart-dot" style="background:${getMemberCategoryChartColor(index)}"></span>
+              <div class="member-category-chart-label">
+                <strong>${escapeHtml(row.category)}</strong>
+                <span class="member-category-chart-percent">${row.percent.toFixed(1)}%</span>
+              </div>
+              <div class="member-category-chart-amount">約 ${formatMoney(row.twd, "TWD")}</div>
+            </div>
+          `).join("");
+
+          return `<div class="member-category-chart-card">
+            <div class="member-category-chart-head">
+              <div class="member-category-chart-name">${escapeHtml(member)}</div>
+              <div class="member-category-chart-total">合計 約 ${formatMoney(total, "TWD")}</div>
+            </div>
+            ${categories.length
+              ? `<div class="member-category-chart-bar" aria-hidden="true">${barHtml}</div>
+                 <div class="member-category-chart-items">${itemHtml}</div>`
+              : `<div class="empty">尚無資料</div>`}
+          </div>`;
+        })
+        .join("");
+
       const sharedActive = !includePersonal;
       $("statsContent").innerHTML = `
         <div class="card">
@@ -3335,7 +3549,11 @@
           </div>
           ${categoryRows || `<div class="empty">尚無資料</div>`}
         </div>
-        <div class="card"><h3>依成員消費（參考台幣）</h3>${memberRows || `<div class="empty">尚無資料</div>`}</div>`;
+        <div class="card"><h3>依成員消費（參考台幣）</h3>${memberRows || `<div class="empty">尚無資料</div>`}</div>
+        <div class="card">
+          <h3>依成員分類消費圖表（參考台幣）</h3>
+          <div class="member-category-chart-list">${memberCategoryCharts || `<div class="empty">尚無資料</div>`}</div>
+        </div>`;
     }
 
     function renderTripList() {
@@ -4650,7 +4868,10 @@
       syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
       updatePaymentMethodUi();
     });
-    $("cancelExpenseEditBtn").addEventListener("click", () => prepareExpenseForm(true));
+    $("cancelExpenseEditBtn").addEventListener("click", () => {
+      prepareExpenseForm(true);
+      navigate("records");
+    });
     $("addReceiptBtn").addEventListener("click", () => $("receiptInput").click());
     $("receiptInput").addEventListener("change", (event) => handleReceiptSelection(event.target.files || []));
     $("fundForm").addEventListener("submit", saveFund);
@@ -4660,6 +4881,18 @@
     $("fundAmount").addEventListener("input", updateFundPreview);
     $("fundCurrency").addEventListener("change", updateFundPreview);
     $("openFilterBtn").addEventListener("click", openFilter);
+    $("filterStartDate").addEventListener("change", () => {
+      const start = $("filterStartDate").value;
+      const end = $("filterEndDate").value;
+      if (start && (!end || end < start)) $("filterEndDate").value = start;
+    });
+    $("filterShareMemberChips").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-filter-share-member]");
+      if (!button) return;
+      const active = !button.classList.contains("active");
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
     $("recordSortBtn").addEventListener("click", () => {
       state.recordSort = state.recordSort === "dateAsc" ? "dateDesc" : "dateAsc";
       renderExpenseList();
