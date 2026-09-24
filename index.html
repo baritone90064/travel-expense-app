@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v45：Excel 新增每人成員消費明細、共同消費平均每人金額與數值格式 -->
+  <!-- iPhone 修正版 v47：Excel 每人成員總消費工作表新增個人負擔參考台幣合計 -->
 
   <style>
     :root {
@@ -4712,7 +4712,8 @@
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripRows), "旅行資料");
 
-      const EXCEL_NUMBER_FORMAT = "#,##0.########";
+      const EXCEL_INTEGER_FORMAT = "#,##0";
+      const EXCEL_DECIMAL_FORMAT = "#,##0.########";
 
       const applyExcelNumberFormat = (sheet) => {
         if (!sheet?.["!ref"]) return;
@@ -4722,7 +4723,13 @@
             const address = XLSX.utils.encode_cell({ r: row, c: col });
             const cell = sheet[address];
             if (!cell || cell.t !== "n" || !Number.isFinite(cell.v)) continue;
-            cell.z = EXCEL_NUMBER_FORMAT;
+
+            // 整數與小數分開套格式。
+            // 避免部分 Excel / 試算表軟體把 "#,##0.########"
+            // 的小數點本身顯示出來，造成 60,000. 這種尾端多一個點的情況。
+            cell.z = Number.isInteger(cell.v)
+              ? EXCEL_INTEGER_FORMAT
+              : EXCEL_DECIMAL_FORMAT;
           }
         }
       };
@@ -4870,7 +4877,22 @@
           ];
         });
 
+        const memberReferenceTwdTotal = memberRows.reduce(
+          (sum, row) => sum + safeNumber(row[8]),
+          0
+        );
+
         const rows = [memberExpenseHeader, ...(memberRows.length ? memberRows : [["尚無消費資料"]])];
+
+        if (memberRows.length) {
+          rows.push([
+            "", "", "", "", "", "", "",
+            "合計",
+            memberReferenceTwdTotal,
+            "", "", "", ""
+          ]);
+        }
+
         const sheet = XLSX.utils.aoa_to_sheet(rows);
         sheet["!cols"] = [
           { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
@@ -4878,6 +4900,35 @@
           { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
         ];
         applyExcelNumberFormat(sheet);
+
+        if (memberRows.length) {
+          const totalRowNumber = rows.length;
+          const totalLabelCell = sheet[`H${totalRowNumber}`];
+          const totalValueCell = sheet[`I${totalRowNumber}`];
+
+          if (totalLabelCell) {
+            totalLabelCell.s = {
+              ...(totalLabelCell.s || {}),
+              font: { bold: true },
+              border: {
+                top: { style: "thin", color: { rgb: "B7B7B7" } }
+              }
+            };
+          }
+
+          if (totalValueCell) {
+            totalValueCell.z = EXCEL_INTEGER_FORMAT;
+            totalValueCell.s = {
+              ...(totalValueCell.s || {}),
+              font: { bold: true },
+              numFmt: EXCEL_INTEGER_FORMAT,
+              border: {
+                top: { style: "thin", color: { rgb: "B7B7B7" } }
+              }
+            };
+          }
+        }
+
         XLSX.utils.book_append_sheet(wb, sheet, makeUniqueMemberSheetName(member));
       });
 
@@ -5002,7 +5053,7 @@
       XLSX.utils.book_append_sheet(wb, settlementSheet, "結算");
 
       const filename = `${state.trip.name || "旅行記帳"}_${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
-      XLSX.writeFile(wb, filename);
+      XLSX.writeFile(wb, filename, { cellStyles: true });
       toast("Excel 已匯出");
     }
 
