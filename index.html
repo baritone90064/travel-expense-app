@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v41：成員分類改圓餅圖、匯出每人分類消費、首頁幣別卡片與篩選帳單總額優化 -->
+  <!-- iPhone 修正版 v42：篩選開始日期連動結束日期，篩選結果改顯示參考台幣總金額 -->
 
   <style>
     :root {
@@ -3017,8 +3017,9 @@
       const filtered = hasActiveRecordFilters();
       // 未篩選時只顯示共同消費；套用篩選後則顯示篩選到的全部金額。
       const grossTotals = sumAmountsByCurrency(items, (item) => (!filtered && isPersonalExpense(item)) ? 0 : item.amount);
-      const settlementTotals = filtered ? sumSettlementAmountsByCurrency(items) : null;
-      const pendingCardCount = filtered ? items.filter(isCardBillPending).length : 0;
+      const referenceTwdTotal = filtered
+        ? items.reduce((sum, item) => sum + getExpenseTwdForStats(item), 0)
+        : 0;
       const memberTotals = selectedMembers.map((member) => ({
         member,
         totals: sumAmountsByCurrency(items, (item) => getExpenseShareAmount(item, member))
@@ -3048,9 +3049,10 @@
             <div class="record-summary-values">${renderAmountValues(grossTotals)}</div>
           </div>
           <div class="record-summary-block">
-            <div class="record-summary-label">帳單／結算總額</div>
-            <div class="record-summary-values">${renderAmountValues(settlementTotals || {})}</div>
-            <div class="record-summary-note">信用卡有正式帳單時使用帳單金額；現金與待確認信用卡使用原始金額${pendingCardCount ? `・${pendingCardCount} 筆待確認` : ""}</div>
+            <div class="record-summary-label">參考台幣總金額</div>
+            <div class="record-summary-values">
+              <div class="record-summary-value">約 ${formatMoney(referenceTwdTotal, "TWD")}</div>
+            </div>
           </div>
           ${memberTotals.map(({ member, totals }) => `
             <div class="record-summary-block">
@@ -5004,8 +5006,14 @@
     $("openFilterBtn").addEventListener("click", openFilter);
     $("filterStartDate").addEventListener("change", () => {
       const start = $("filterStartDate").value;
-      const end = $("filterEndDate").value;
-      if (start && (!end || end < start)) $("filterEndDate").value = start;
+      if (start) {
+        // iPhone 日期選擇器在挑選過程中可能先帶入今日；
+        // 每次開始日期真正變更後，都把結束日期重設成同一天。
+        // 使用者仍可在此之後手動修改結束日期。
+        $("filterEndDate").value = start;
+      } else {
+        $("filterEndDate").value = "";
+      }
     });
     $("filterShareMemberChips").addEventListener("click", (event) => {
       const button = event.target.closest("[data-filter-share-member]");
