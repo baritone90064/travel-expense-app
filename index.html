@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v47：Excel 每人成員總消費工作表新增個人負擔參考台幣合計 -->
+  <!-- iPhone 修正版 v48：Excel 各消費工作表新增成員摘要，並完整支援含／不含個人消費匯出 -->
 
   <style>
     :root {
@@ -4260,18 +4260,33 @@
       if (resolver) resolver(value);
     }
 
-    function chooseExportPersonalScope() {
+    function chooseExportPersonalScope(mode = "selfPaid") {
       if (exportScopeResolver) finishExportScopeChoice(null);
 
-      const selfPaidCount = state.expenses.filter((item) =>
-        excludeSelfPaidPersonalFromSettlement(item)
-      ).length;
-
       const countEl = $("exportScopeCount");
-      if (countEl) {
-        countEl.textContent = selfPaidCount
-          ? `本旅程共有 ${selfPaidCount} 筆「本人自付個人消費」。`
-          : "本旅程目前沒有「本人自付個人消費」。";
+      const excludeBtn = $("exportScopeExcludeBtn");
+      const includeBtn = $("exportScopeIncludeBtn");
+
+      if (mode === "allPersonal") {
+        const personalCount = state.expenses.filter((item) => isPersonalExpense(item)).length;
+        if (countEl) {
+          countEl.textContent = personalCount
+            ? `本旅程共有 ${personalCount} 筆個人消費。`
+            : "本旅程目前沒有個人消費。";
+        }
+        if (excludeBtn) excludeBtn.textContent = "不含個人消費";
+        if (includeBtn) includeBtn.textContent = "包含個人消費";
+      } else {
+        const selfPaidCount = state.expenses.filter((item) =>
+          excludeSelfPaidPersonalFromSettlement(item)
+        ).length;
+        if (countEl) {
+          countEl.textContent = selfPaidCount
+            ? `本旅程共有 ${selfPaidCount} 筆「本人自付個人消費」。`
+            : "本旅程目前沒有「本人自付個人消費」。";
+        }
+        if (excludeBtn) excludeBtn.textContent = "不含本人自付個人消費";
+        if (includeBtn) includeBtn.textContent = "包含本人自付個人消費";
       }
 
       $("exportScopeModal")?.classList.remove("hidden");
@@ -4686,9 +4701,15 @@
     async function exportWorkbook() {
       if (!state.trip) return;
 
-      const includeSelfPaidPersonal = await chooseExportPersonalScope();
-      if (includeSelfPaidPersonal === null) return;
-      const exportExpenses = getExportExpenses(includeSelfPaidPersonal);
+      const includePersonalExpenses = await chooseExportPersonalScope("allPersonal");
+      if (includePersonalExpenses === null) return;
+
+      // Excel 的「不含個人消費」是完整排除所有個人消費：
+      // 不建立個人消費工作表、成員工作表不帶個人消費、
+      // 統計分析也只使用共同消費。
+      const exportExpenses = includePersonalExpenses
+        ? [...state.expenses]
+        : state.expenses.filter((item) => !isPersonalExpense(item));
 
       let XLSX;
       try {
@@ -4745,6 +4766,90 @@
         return members.length ? safeNumber(item.amount) / members.length : 0;
       };
 
+      const getExcelSummaryCurrencies = (items) =>
+        [...new Set([
+          ...(state.trip.enabledCurrencies || []),
+          ...items.map((item) => item.currency)
+        ])].filter(Boolean);
+
+      const getMemberOriginalShare = (item, member) => {
+        if (isPersonalExpense(item)) {
+          return getPersonalExpenseOwner(item) === member ? safeNumber(item.amount) : 0;
+        }
+        const members = getSharedExpenseMembers(item);
+        if (!members.includes(member) || !members.length) return 0;
+        return safeNumber(item.amount) / members.length;
+      };
+
+      const getMemberReferenceTwdShareRounded = (item, member) => {
+        const twd = getExpenseTwdForStats(item);
+        if (isPersonalExpense(item)) {
+          return getPersonalExpenseOwner(item) === member
+            ? roundReferenceTwd(twd)
+            : 0;
+        }
+        const members = getSharedExpenseMembers(item);
+        if (!members.includes(member) || !members.length) return 0;
+        return roundReferenceTwd(twd / members.length);
+      };
+
+      const buildMemberSummaryRows = (items, mode, title) => {
+        const currencies = getExcelSummaryCurrencies(items);
+        const rows = [
+          [title],
+          ["成員", ...currencies, "參考台幣合計"]
+        ];
+
+        state.trip.members.forEach((member) => {
+          const currencyTotals = Object.fromEntries(currencies.map((currency) => [currency, 0]));
+          let referenceTwdTotal = 0;
+
+          items.forEach((item) => {
+            if (mode === "shared" && isPersonalExpense(item)) return;
+            if (mode === "personal" && !isPersonalExpense(item)) return;
+
+            const originalShare = getMemberOriginalShare(item, member);
+            if (originalShare > 0 && currencyTotals[item.currency] !== undefined) {
+              currencyTotals[item.currency] += originalShare;
+            }
+            referenceTwdTotal += getMemberReferenceTwdShareRounded(item, member);
+          });
+
+          rows.push([
+            member,
+            ...currencies.map((currency) => currencyTotals[currency]),
+            referenceTwdTotal
+          ]);
+        });
+
+        return { rows, currencies };
+      };
+
+      const applySummaryStyle = (sheet, summaryRowCount) => {
+        if (!sheet || summaryRowCount < 2) return;
+
+        const titleCell = sheet["A1"];
+        if (titleCell) {
+          titleCell.s = {
+            ...(titleCell.s || {}),
+            font: { bold: true, sz: 12 }
+          };
+        }
+
+        const headerRow = 2;
+        const range = XLSX.utils.decode_range(sheet["!ref"]);
+        for (let col = range.s.c; col <= range.e.c; col += 1) {
+          const address = XLSX.utils.encode_cell({ r: headerRow - 1, c: col });
+          const cell = sheet[address];
+          if (!cell) continue;
+          cell.s = {
+            ...(cell.s || {}),
+            font: { bold: true },
+            fill: { fgColor: { rgb: "F3F1EB" } }
+          };
+        }
+      };
+
       const commonExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
         "幣別", "金額", "平均每人金額", "參考台幣",
@@ -4787,8 +4892,18 @@
       const appendExpenseSheet = (name, items, options = {}) => {
         const includeAveragePerPerson = options.includeAveragePerPerson === true;
         const header = includeAveragePerPerson ? commonExpenseHeader : personalExpenseHeader;
-        const rows = [header, ...items.map((item) => expenseToRow(item, includeAveragePerPerson))];
+        const summaryMode = options.summaryMode || (includeAveragePerPerson ? "shared" : "personal");
+        const summaryTitle = options.summaryTitle || `${name}成員摘要`;
+        const summary = buildMemberSummaryRows(items, summaryMode, summaryTitle);
+
+        const rows = [
+          ...summary.rows,
+          [],
+          header,
+          ...items.map((item) => expenseToRow(item, includeAveragePerPerson))
+        ];
         if (!items.length) rows.push(["尚無消費資料"]);
+
         const sheet = XLSX.utils.aoa_to_sheet(rows);
         sheet["!cols"] = includeAveragePerPerson
           ? [
@@ -4801,16 +4916,35 @@
               { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 },
               { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
             ];
+
         applyExcelNumberFormat(sheet);
+        applySummaryStyle(sheet, summary.rows.length);
         XLSX.utils.book_append_sheet(wb, sheet, name);
       };
 
+      const sharedExportExpenses = exportExpenses.filter((item) => !isPersonalExpense(item));
+      const personalExportExpenses = exportExpenses.filter((item) => isPersonalExpense(item));
+
       appendExpenseSheet(
         "共同消費",
-        exportExpenses.filter((item) => !isPersonalExpense(item)),
-        { includeAveragePerPerson: true }
+        sharedExportExpenses,
+        {
+          includeAveragePerPerson: true,
+          summaryMode: "shared",
+          summaryTitle: "共同消費－每位成員摘要"
+        }
       );
-      appendExpenseSheet("個人消費", exportExpenses.filter((item) => isPersonalExpense(item)));
+
+      if (includePersonalExpenses) {
+        appendExpenseSheet(
+          "個人消費",
+          personalExportExpenses,
+          {
+            summaryMode: "personal",
+            summaryTitle: "個人消費－每位成員摘要"
+          }
+        );
+      }
 
       const usedSheetNames = new Set(wb.SheetNames);
       const makeUniqueMemberSheetName = (member) => {
@@ -4882,7 +5016,33 @@
           0
         );
 
-        const rows = [memberExpenseHeader, ...(memberRows.length ? memberRows : [["尚無消費資料"]])];
+        const memberSummaryCurrencies = getExcelSummaryCurrencies(memberItems);
+        const memberOriginalTotals = Object.fromEntries(
+          memberSummaryCurrencies.map((currency) => [currency, 0])
+        );
+        memberItems.forEach((item) => {
+          const value = getMemberOriginalShare(item, member);
+          if (memberOriginalTotals[item.currency] !== undefined) {
+            memberOriginalTotals[item.currency] += value;
+          }
+        });
+
+        const memberSummaryRows = [
+          [`${member}－總消費摘要`],
+          ["成員", ...memberSummaryCurrencies, "參考台幣合計"],
+          [
+            member,
+            ...memberSummaryCurrencies.map((currency) => memberOriginalTotals[currency]),
+            memberReferenceTwdTotal
+          ]
+        ];
+
+        const rows = [
+          ...memberSummaryRows,
+          [],
+          memberExpenseHeader,
+          ...(memberRows.length ? memberRows : [["尚無消費資料"]])
+        ];
 
         if (memberRows.length) {
           rows.push([
@@ -4900,6 +5060,7 @@
           { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
         ];
         applyExcelNumberFormat(sheet);
+        applySummaryStyle(sheet, memberSummaryRows.length);
 
         if (memberRows.length) {
           const totalRowNumber = rows.length;
@@ -4983,18 +5144,34 @@
         statsRows.push([]);
       };
 
-      appendCategorySection("依分類－僅共同消費", buildCategoryStats(false, exportExpenses));
-      appendCategorySection("依分類－包含個人消費", buildCategoryStats(true, exportExpenses));
+      if (includePersonalExpenses) {
+        appendCategorySection("依分類－僅共同消費", buildCategoryStats(false, exportExpenses));
+        appendCategorySection("依分類－包含個人消費", buildCategoryStats(true, exportExpenses));
+      } else {
+        appendCategorySection("依分類－共同消費", buildCategoryStats(false, exportExpenses));
+      }
+
       statsRows.push(["依成員消費"]);
-      statsRows.push(["成員", "共同分攤（參考台幣）", "個人消費（參考台幣）", "合計（參考台幣）"]);
-      const memberStatsRows = memberStats
-        .map(({ member, shared, personal, total }) => [
-          member,
-          roundReferenceTwd(shared),
-          roundReferenceTwd(personal),
-          roundReferenceTwd(total)
-        ]);
-      statsRows.push(...(memberStatsRows.length ? memberStatsRows : [["尚無資料"]]));
+      if (includePersonalExpenses) {
+        statsRows.push(["成員", "共同分攤（參考台幣）", "個人消費（參考台幣）", "合計（參考台幣）"]);
+        const memberStatsRows = memberStats
+          .map(({ member, shared, personal, total }) => [
+            member,
+            roundReferenceTwd(shared),
+            roundReferenceTwd(personal),
+            roundReferenceTwd(total)
+          ]);
+        statsRows.push(...(memberStatsRows.length ? memberStatsRows : [["尚無資料"]]));
+      } else {
+        statsRows.push(["成員", "共同分攤（參考台幣）", "合計（參考台幣）"]);
+        const memberStatsRows = memberStats
+          .map(({ member, shared, total }) => [
+            member,
+            roundReferenceTwd(shared),
+            roundReferenceTwd(total)
+          ]);
+        statsRows.push(...(memberStatsRows.length ? memberStatsRows : [["尚無資料"]]));
+      }
       statsRows.push([]);
 
       statsRows.push(["每人分類消費"]);
