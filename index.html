@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v49：Excel 匯出檔名區分是否包含個人消費 -->
+  <!-- iPhone 修正版 v50：Excel 成員欄名調整，表格改外框實線／內橫虛線／文字置中 -->
 
   <style>
     :root {
@@ -4850,6 +4850,49 @@
         }
       };
 
+      const applyExcelTableStyle = (sheet, startRow, startCol, endRow, endCol, options = {}) => {
+        if (!sheet || endRow < startRow || endCol < startCol) return;
+
+        const solid = { style: "thin", color: { rgb: "666666" } };
+        const dotted = { style: "dotted", color: { rgb: "A6A6A6" } };
+        const headerRow = options.headerRow || startRow;
+
+        for (let row = startRow; row <= endRow; row += 1) {
+          for (let col = startCol; col <= endCol; col += 1) {
+            const address = XLSX.utils.encode_cell({ r: row - 1, c: col - 1 });
+            const cell = sheet[address];
+            if (!cell) continue;
+
+            const border = {};
+            if (row === startRow) border.top = solid;
+            if (row === endRow) {
+              border.bottom = solid;
+            } else {
+              border.bottom = dotted;
+            }
+            if (col === startCol) border.left = solid;
+            if (col === endCol) border.right = solid;
+
+            cell.s = {
+              ...(cell.s || {}),
+              alignment: {
+                horizontal: "center",
+                vertical: "center",
+                wrapText: true
+              },
+              border
+            };
+
+            if (row === headerRow) {
+              cell.s = {
+                ...cell.s,
+                font: { ...(cell.s?.font || {}), bold: true }
+              };
+            }
+          }
+        }
+      };
+
       const commonExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
         "幣別", "金額", "平均每人金額", "參考台幣",
@@ -4919,6 +4962,31 @@
 
         applyExcelNumberFormat(sheet);
         applySummaryStyle(sheet, summary.rows.length);
+
+        // 摘要：A2 ～ 最後一位成員（標題 A1 不加框）
+        const summaryColumnCount = summary.rows[1]?.length || 1;
+        if (summary.rows.length >= 2) {
+          applyExcelTableStyle(
+            sheet,
+            2,
+            1,
+            summary.rows.length,
+            summaryColumnCount,
+            { headerRow: 2 }
+          );
+        }
+
+        // 明細：摘要後空一列，接著是欄位標題與資料
+        const detailHeaderRow = summary.rows.length + 2;
+        applyExcelTableStyle(
+          sheet,
+          detailHeaderRow,
+          1,
+          rows.length,
+          header.length,
+          { headerRow: detailHeaderRow }
+        );
+
         XLSX.utils.book_append_sheet(wb, sheet, name);
       };
 
@@ -4975,7 +5043,7 @@
 
       const memberExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "原始消費金額", "個人負擔金額（原幣）", "個人負擔參考台幣",
+        "幣別", "原始消費金額", "每人平均金額（原幣）", "每人平均參考台幣",
         "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
       ];
 
@@ -5061,6 +5129,28 @@
         ];
         applyExcelNumberFormat(sheet);
         applySummaryStyle(sheet, memberSummaryRows.length);
+
+        // 成員摘要：A2 ～ 參考台幣合計
+        const memberSummaryColumnCount = memberSummaryRows[1]?.length || 1;
+        applyExcelTableStyle(
+          sheet,
+          2,
+          1,
+          memberSummaryRows.length,
+          memberSummaryColumnCount,
+          { headerRow: 2 }
+        );
+
+        // 消費明細：A5 ～ 最後一列（含合計列）
+        const memberDetailHeaderRow = memberSummaryRows.length + 2;
+        applyExcelTableStyle(
+          sheet,
+          memberDetailHeaderRow,
+          1,
+          rows.length,
+          memberExpenseHeader.length,
+          { headerRow: memberDetailHeaderRow }
+        );
 
         if (memberRows.length) {
           const totalRowNumber = rows.length;
