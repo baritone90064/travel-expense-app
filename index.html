@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v54：新增退稅篩選，移除篩選成員與退稅區塊備註 -->
+  <!-- iPhone 修正版 v56：Excel 消費明細加入退稅欄位、新增退稅明細工作表與退稅統計 -->
 
   <style>
     :root {
@@ -321,6 +321,18 @@
     .record-summary-note {
       margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45;
     }
+
+    .stats-refund-summary { display: grid; gap: 8px; }
+    .stats-refund-row {
+      display: grid; grid-template-columns: minmax(0,1fr) auto;
+      gap: 10px; align-items: center; padding: 9px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+    .stats-refund-row:last-child { border-bottom: 0; }
+    .stats-refund-currency { font-size: 13px; font-weight: 850; }
+    .stats-refund-original { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .stats-refund-twd { text-align: right; font-size: 13px; font-weight: 850; white-space: nowrap; }
+    .stats-refund-note { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 
     .stats-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
     .stats-card-head h3 { margin: 0; }
@@ -3208,6 +3220,34 @@
         .sort((a, b) => b.total - a.total);
     }
 
+    function buildTaxRefundStats(sourceExpenses = state.expenses) {
+      const byCurrency = {};
+      let receivedTwdTotal = 0;
+      let pendingCount = 0;
+
+      sourceExpenses.forEach((item) => {
+        if (!isTaxRefundEnabled(item)) return;
+
+        if (!isTaxRefundReceived(item)) {
+          pendingCount += 1;
+          return;
+        }
+
+        const currency = getTaxRefundCurrency(item);
+        const amount = safeNumber(item.taxRefundAmount);
+        if (!currency || amount <= 0) return;
+
+        byCurrency[currency] = safeNumber(byCurrency[currency]) + amount;
+        receivedTwdTotal += getTaxRefundTwdEquivalent(item);
+      });
+
+      return {
+        byCurrency,
+        receivedTwdTotal,
+        pendingCount
+      };
+    }
+
     function buildMemberCategoryStats(sourceExpenses = state.expenses) {
       const categoryMapByMember = Object.fromEntries(
         state.trip.members.map((member) => [member, {}])
@@ -3962,6 +4002,27 @@
         </div>`)
         .join("");
 
+      const refundStats = buildTaxRefundStats();
+      const refundCurrencyOrder = [...new Set([
+        ...(state.trip.enabledCurrencies || []),
+        ...Object.keys(refundStats.byCurrency)
+      ])].filter((currency) => safeNumber(refundStats.byCurrency[currency]) > 0);
+
+      const refundRows = refundCurrencyOrder.map((currency) => `
+        <div class="stats-refund-row">
+          <div>
+            <div class="stats-refund-currency">${escapeHtml(currency)}｜${escapeHtml(CURRENCIES[currency]?.name || currency)}</div>
+            <div class="stats-refund-original">已退稅 ${formatMoney(refundStats.byCurrency[currency], currency)}</div>
+          </div>
+          <div class="stats-refund-twd">參考台幣<br>約 ${formatMoney(
+            state.expenses
+              .filter((item) => isTaxRefundReceived(item) && getTaxRefundCurrency(item) === currency)
+              .reduce((sum, item) => sum + getTaxRefundTwdEquivalent(item), 0),
+            "TWD"
+          )}</div>
+        </div>
+      `).join("");
+
       const memberCategoryCharts = buildMemberCategoryStats()
         .map(({ member, total, categories }) => {
           let cursor = 0;
@@ -4009,6 +4070,11 @@
             <button class="segment ${!sharedActive ? "active" : ""}" type="button" data-stats-category-mode="all" aria-pressed="${!sharedActive}">包含個人消費</button>
           </div>
           ${categoryRows || `<div class="empty">尚無資料</div>`}
+        </div>
+        <div class="card">
+          <h3>退稅統計</h3>
+          ${refundRows || `<div class="empty">尚無已退稅資料</div>`}
+          ${refundRows ? `<div class="stats-refund-note">已退稅參考台幣合計：約 ${formatMoney(refundStats.receivedTwdTotal, "TWD")}${refundStats.pendingCount ? `・另有 ${refundStats.pendingCount} 筆待退稅未扣除` : ""}</div>` : (refundStats.pendingCount ? `<div class="stats-refund-note">目前有 ${refundStats.pendingCount} 筆待退稅，尚未計入退稅扣減。</div>` : "")}
         </div>
         <div class="card"><h3>依成員消費（參考台幣）</h3>${memberRows || `<div class="empty">尚無資料</div>`}</div>
         <div class="card">
@@ -5106,6 +5172,45 @@
 
       const roundReferenceTwd = (value) => Math.round(safeNumber(value));
 
+      const getExcelRefundStatusText = (item) => {
+        if (!isTaxRefundEnabled(item)) return "無退稅";
+        return isTaxRefundReceived(item) ? "已退稅" : "待退稅";
+      };
+
+      const getExcelRefundMethodText = (item) => {
+        if (!isTaxRefundEnabled(item)) return "";
+        return item.taxRefundMethod === "card" ? "退回信用卡" : "現金";
+      };
+
+      const getExcelRefundRecipientText = (item) => {
+        if (!isTaxRefundEnabled(item)) return "";
+        return item.taxRefundRecipient === "FUND"
+          ? "公基金"
+          : (item.taxRefundRecipient || "");
+      };
+
+      const getExcelRefundReferenceTwd = (item) =>
+        isTaxRefundReceived(item)
+          ? roundReferenceTwd(getTaxRefundTwdEquivalent(item))
+          : "";
+
+      const getExcelGrossReferenceTwd = (item) =>
+        roundReferenceTwd(getExpenseGrossTwdForStats(item));
+
+      const getExcelNetReferenceTwd = (item) =>
+        roundReferenceTwd(getExpenseTwdForStats(item));
+
+      const getExcelRefundFields = (item) => [
+        getExcelRefundStatusText(item),
+        isTaxRefundEnabled(item) ? (item.taxRefundDate || "") : "",
+        getExcelRefundMethodText(item),
+        isTaxRefundEnabled(item) ? getTaxRefundCurrency(item) : "",
+        isTaxRefundEnabled(item) ? safeNumber(item.taxRefundAmount) : "",
+        getExcelRefundRecipientText(item),
+        getExcelRefundReferenceTwd(item),
+        getExcelNetReferenceTwd(item)
+      ];
+
       const getSharedExpenseMembers = (item) =>
         uniqueTextList(item.shareMemberIds, state.trip.members)
           .filter((member) => state.trip.members.includes(member));
@@ -5146,10 +5251,25 @@
         const currencies = getExcelSummaryCurrencies(items);
         const rows = [
           [title],
-          ["成員", ...currencies, "參考台幣合計"]
+          ["成員", ...currencies, "淨參考台幣合計"]
         ];
 
-        state.trip.members.forEach((member) => {
+        const getMemberRefundTwdShareRounded = (item, member) => {
+        if (!isTaxRefundReceived(item)) return 0;
+        const refundTwd = getTaxRefundTwdEquivalent(item);
+
+        if (isPersonalExpense(item)) {
+          return getPersonalExpenseOwner(item) === member
+            ? roundReferenceTwd(refundTwd)
+            : 0;
+        }
+
+        const members = getSharedExpenseMembers(item);
+        if (!members.includes(member) || !members.length) return 0;
+        return roundReferenceTwd(refundTwd / members.length);
+      };
+
+      state.trip.members.forEach((member) => {
           const currencyTotals = Object.fromEntries(currencies.map((currency) => [currency, 0]));
           let referenceTwdTotal = 0;
 
@@ -5242,15 +5362,22 @@
         }
       };
 
+      const refundExpenseHeaders = [
+        "退稅狀態", "退稅日期", "退稅方式", "退稅幣別",
+        "退稅金額", "退稅收款人", "退稅參考台幣", "淨參考台幣"
+      ];
+
       const commonExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
         "幣別", "原幣金額", "每人平均金額（原幣）", "參考台幣", "每人平均參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
+        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        ...refundExpenseHeaders
       ];
       const personalExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
         "幣別", "原幣金額", "參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
+        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        ...refundExpenseHeaders
       ];
 
       const expenseToRow = (item, includeAveragePerPerson = false) => {
@@ -5260,7 +5387,7 @@
           ? getPersonalExpenseOwner(item)
           : sharedMembers.join("、");
 
-        const referenceTwd = roundReferenceTwd(getExpenseTwdForStats(item));
+        const grossReferenceTwd = getExcelGrossReferenceTwd(item);
 
         const base = [
           item.date,
@@ -5274,10 +5401,10 @@
 
         if (includeAveragePerPerson) {
           base.push(getAveragePerPersonAmount(item));
-          base.push(referenceTwd);
-          base.push(sharedMembers.length ? roundReferenceTwd(referenceTwd / sharedMembers.length) : 0);
+          base.push(grossReferenceTwd);
+          base.push(sharedMembers.length ? roundReferenceTwd(grossReferenceTwd / sharedMembers.length) : 0);
         } else {
-          base.push(referenceTwd);
+          base.push(grossReferenceTwd);
         }
 
         return [
@@ -5285,7 +5412,8 @@
           item.payer === "FUND" ? "公基金" : (item.payer || ""),
           item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
           hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
-          hasActualCardBill(item) ? getActualBillAmount(item) : ""
+          hasActualCardBill(item) ? getActualBillAmount(item) : "",
+          ...getExcelRefundFields(item)
         ];
       };
 
@@ -5309,12 +5437,16 @@
           ? [
               { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
               { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
-              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
+              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+              { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+              { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }
             ]
           : [
               { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
               { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 },
-              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
+              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+              { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+              { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }
             ];
 
         applyExcelNumberFormat(sheet);
@@ -5401,7 +5533,9 @@
       const memberExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
         "幣別", "原始消費金額", "每人平均金額（原幣）", "每人平均參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
+        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        "退稅狀態", "退稅日期", "退稅方式", "退稅幣別", "退稅金額",
+        "退稅收款人", "該成員退稅參考台幣", "該成員淨參考台幣"
       ];
 
       state.trip.members.forEach((member) => {
@@ -5419,6 +5553,9 @@
             ? safeNumber(item.amount)
             : getAveragePerPersonAmount(item);
 
+          const memberNetTwd = roundReferenceTwd(getMemberExpenseTwdShare(item, member));
+          const memberRefundTwd = getMemberRefundTwdShareRounded(item, member);
+
           return [
             item.date,
             item.category,
@@ -5428,11 +5565,19 @@
             item.currency,
             safeNumber(item.amount),
             personalOriginalAmount,
-            roundReferenceTwd(getMemberExpenseTwdShare(item, member)),
+            memberNetTwd,
             item.payer === "FUND" ? "公基金" : (item.payer || ""),
             item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
             hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
-            hasActualCardBill(item) ? getActualBillAmount(item) : ""
+            hasActualCardBill(item) ? getActualBillAmount(item) : "",
+            getExcelRefundStatusText(item),
+            isTaxRefundEnabled(item) ? (item.taxRefundDate || "") : "",
+            getExcelRefundMethodText(item),
+            isTaxRefundEnabled(item) ? getTaxRefundCurrency(item) : "",
+            isTaxRefundEnabled(item) ? safeNumber(item.taxRefundAmount) : "",
+            getExcelRefundRecipientText(item),
+            isTaxRefundReceived(item) ? memberRefundTwd : "",
+            memberNetTwd
           ];
         });
 
@@ -5454,7 +5599,7 @@
 
         const memberSummaryRows = [
           [`${member}－總消費摘要`],
-          ["成員", ...memberSummaryCurrencies, "參考台幣合計"],
+          ["成員", ...memberSummaryCurrencies, "淨參考台幣合計"],
           [
             member,
             ...memberSummaryCurrencies.map((currency) => memberOriginalTotals[currency]),
@@ -5474,7 +5619,7 @@
             "", "", "", "", "", "", "",
             "合計",
             memberReferenceTwdTotal,
-            "", "", "", ""
+            "", "", "", "", "", "", "", "", "", "", "", ""
           ]);
         }
 
@@ -5482,7 +5627,9 @@
         sheet["!cols"] = [
           { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
           { wch: 9 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
-          { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
+          { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+          { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
+          { wch: 14 }, { wch: 20 }, { wch: 18 }
         ];
         applyExcelNumberFormat(sheet);
         applySummaryStyle(sheet, memberSummaryRows.length);
@@ -5539,6 +5686,61 @@
 
         XLSX.utils.book_append_sheet(wb, sheet, makeUniqueMemberSheetName(member));
       });
+
+      const refundItems = exportExpenses
+        .filter((item) => isTaxRefundEnabled(item))
+        .sort((a, b) => String(a.taxRefundDate || a.date || "").localeCompare(String(b.taxRefundDate || b.date || "")));
+
+      const refundDetailHeader = [
+        "消費日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
+        "原消費幣別", "原消費金額", "原消費參考台幣",
+        "退稅狀態", "退稅日期", "退稅方式", "退稅幣別", "退稅金額",
+        "退稅收款人", "退稅參考台幣", "淨參考台幣"
+      ];
+
+      const refundDetailRows = refundItems.map((item) => {
+        const personal = isPersonalExpense(item);
+        return [
+          item.date,
+          item.category,
+          item.note || "",
+          personal ? "個人消費" : "共同消費",
+          personal ? getPersonalExpenseOwner(item) : getSharedExpenseMembers(item).join("、"),
+          item.currency,
+          safeNumber(item.amount),
+          getExcelGrossReferenceTwd(item),
+          getExcelRefundStatusText(item),
+          item.taxRefundDate || "",
+          getExcelRefundMethodText(item),
+          getTaxRefundCurrency(item),
+          safeNumber(item.taxRefundAmount),
+          getExcelRefundRecipientText(item),
+          getExcelRefundReferenceTwd(item),
+          getExcelNetReferenceTwd(item)
+        ];
+      });
+
+      const refundSheetRows = [
+        refundDetailHeader,
+        ...(refundDetailRows.length ? refundDetailRows : [["尚無退稅資料"]])
+      ];
+      const refundSheet = XLSX.utils.aoa_to_sheet(refundSheetRows);
+      refundSheet["!cols"] = [
+        { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
+        { wch: 12 }, { wch: 14 }, { wch: 16 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
+        { wch: 14 }, { wch: 16 }, { wch: 14 }
+      ];
+      applyExcelNumberFormat(refundSheet);
+      applyExcelTableStyle(
+        refundSheet,
+        1,
+        1,
+        refundSheetRows.length,
+        refundDetailHeader.length,
+        { headerRow: 1 }
+      );
+      XLSX.utils.book_append_sheet(wb, refundSheet, "退稅明細");
 
       const fundRows = state.funds.map((item) => [
         item.date,
@@ -5636,6 +5838,40 @@
         });
       });
       statsRows.push(...(memberCategoryRows.length ? memberCategoryRows : [["尚無資料"]]));
+      statsRows.push([]);
+
+      statsRows.push(["退稅統計"]);
+      statsRows.push(["幣別", "已退稅金額", "參考台幣"]);
+
+      const refundStats = buildTaxRefundStats(exportExpenses);
+      const refundStatsCurrencies = [...new Set([
+        ...(state.trip.enabledCurrencies || []),
+        ...Object.keys(refundStats.byCurrency)
+      ])].filter((currency) => safeNumber(refundStats.byCurrency[currency]) > 0);
+
+      if (refundStatsCurrencies.length) {
+        refundStatsCurrencies.forEach((currency) => {
+          const currencyRefundTwd = exportExpenses
+            .filter((item) => isTaxRefundReceived(item) && getTaxRefundCurrency(item) === currency)
+            .reduce((sum, item) => sum + getTaxRefundTwdEquivalent(item), 0);
+
+          statsRows.push([
+            currency,
+            safeNumber(refundStats.byCurrency[currency]),
+            roundReferenceTwd(currencyRefundTwd)
+          ]);
+        });
+        statsRows.push([
+          "合計",
+          "",
+          roundReferenceTwd(refundStats.receivedTwdTotal)
+        ]);
+      } else {
+        statsRows.push(["尚無已退稅資料"]);
+      }
+
+      statsRows.push([]);
+      statsRows.push(["待退稅筆數", refundStats.pendingCount]);
 
       const statsSheet = XLSX.utils.aoa_to_sheet(statsRows);
       statsSheet["!cols"] = [
