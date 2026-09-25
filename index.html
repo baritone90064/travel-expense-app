@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v50：Excel 成員欄名調整，表格改外框實線／內橫虛線／文字置中 -->
+  <!-- iPhone 修正版 v52：新增退稅模組，快速記帳分類移至金額與支付者之間，保留 v51 Excel 欄位調整 -->
 
   <style>
     :root {
@@ -191,6 +191,22 @@
     .card-billing-box label { margin-bottom: 6px; }
     .card-billing-grid { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 9px; }
     .card-billing-status { margin-top: 6px; color: var(--warning); font-size: 11px; font-weight: 760; line-height: 1.4; }
+
+    .tax-refund-box {
+      margin-top: 9px; padding: 11px 12px; border: 1px solid #d9e9df;
+      border-radius: 14px; background: #f6fcf8;
+    }
+    .tax-refund-box label { margin-bottom: 6px; }
+    .record-tax-refund {
+      margin-top: 5px; padding: 4px 7px; border-radius: 9px;
+      font-size: 10px; font-weight: 780; line-height: 1.35;
+      color: #2f6b50; background: #eef9f2; border: 1px solid #cfe7d7;
+      text-align: right;
+    }
+    .record-tax-refund.pending {
+      color: #8f5b12; background: #fff6e5; border-color: #ead3a7;
+    }
+
     .record-twd { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 720; text-align: right; white-space: nowrap; }
     .record-twd.actual { color: var(--primary-dark); font-weight: 820; }
     .record-card-status {
@@ -777,6 +793,11 @@
           </div>
 
           <div class="field">
+            <label for="expenseCategory">消費分類</label>
+            <select id="expenseCategory" required></select>
+          </div>
+
+          <div class="field">
             <label for="expensePayer">支付者</label>
             <select id="expensePayer" required></select>
           </div>
@@ -799,11 +820,6 @@
           </div>
 
           <div class="field">
-            <label for="expenseCategory">消費分類</label>
-            <select id="expenseCategory" required></select>
-          </div>
-
-          <div class="field">
             <label>消費類型</label>
             <input id="expenseIsPersonal" type="hidden" value="false" />
             <div class="segmented" role="group" aria-label="消費類型">
@@ -815,6 +831,53 @@
           <div class="field">
             <label id="expenseAllocationLabel">分攤成員</label>
             <div id="shareMemberChips" class="chips" aria-label="分攤成員"></div>
+          </div>
+
+          <div class="field">
+            <label>退稅</label>
+            <input id="expenseTaxRefundEnabled" type="hidden" value="false" />
+            <div class="segmented" role="group" aria-label="是否有退稅">
+              <button id="taxRefundNoBtn" class="segment active" type="button" aria-pressed="true">無退稅</button>
+              <button id="taxRefundYesBtn" class="segment" type="button" aria-pressed="false">有退稅</button>
+            </div>
+
+            <div id="taxRefundBox" class="tax-refund-box hidden">
+              <div class="grid-2">
+                <div>
+                  <label for="expenseTaxRefundStatus">退稅狀態</label>
+                  <select id="expenseTaxRefundStatus">
+                    <option value="pending">待退稅</option>
+                    <option value="received">已退稅</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="expenseTaxRefundRecipient">退稅收款人</label>
+                  <select id="expenseTaxRefundRecipient"></select>
+                </div>
+              </div>
+
+              <label style="margin-top:10px">退稅方式</label>
+              <input id="expenseTaxRefundMethod" type="hidden" value="cash" />
+              <div class="segmented" role="group" aria-label="退稅方式">
+                <button id="taxRefundMethodCashBtn" class="segment active" type="button" aria-pressed="true">現金</button>
+                <button id="taxRefundMethodCardBtn" class="segment" type="button" aria-pressed="false">退回信用卡</button>
+              </div>
+
+              <div style="margin-top:10px">
+                <label for="expenseTaxRefundAmount">退稅金額</label>
+                <div class="card-billing-grid">
+                  <select id="expenseTaxRefundCurrency" aria-label="退稅幣別"></select>
+                  <input id="expenseTaxRefundAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" />
+                </div>
+              </div>
+
+              <div id="taxRefundDateField" style="margin-top:10px">
+                <label for="expenseTaxRefundDate">退稅日期</label>
+                <input id="expenseTaxRefundDate" type="date" />
+              </div>
+
+              <div id="taxRefundHint" class="hint"></div>
+            </div>
           </div>
 
           <div class="field">
@@ -2093,7 +2156,34 @@
       return estimateTwdByRate(amount, currency, rate);
     }
 
-    function getExpenseTwdForStats(item) {
+    function isTaxRefundEnabled(item) {
+      return item?.taxRefundEnabled === true && safeNumber(item?.taxRefundAmount) > 0;
+    }
+
+    function isTaxRefundReceived(item) {
+      return isTaxRefundEnabled(item) && item?.taxRefundStatus === "received";
+    }
+
+    function getTaxRefundCurrency(item) {
+      if (!isTaxRefundEnabled(item)) return "";
+      return item?.taxRefundCurrency || item?.currency || "";
+    }
+
+    function getTaxRefundTwdEquivalent(item) {
+      if (!isTaxRefundReceived(item)) return 0;
+      const amount = safeNumber(item?.taxRefundAmount);
+      const currency = getTaxRefundCurrency(item);
+      if (!currency || amount <= 0) return 0;
+      if (currency === "TWD") return amount;
+
+      const frozen = safeNumber(item?.taxRefundTwdAmount);
+      if (frozen > 0) return frozen;
+
+      const rate = safeNumber(item?.taxRefundExchangeRateSnapshot) || getCurrentExchangeRate(currency);
+      return estimateTwdByRate(amount, currency, rate);
+    }
+
+    function getExpenseGrossTwdForStats(item) {
       if (!item) return 0;
       if (hasActualCardBill(item)) {
         const actualTwd = getActualBillTwdEquivalent(item);
@@ -2101,6 +2191,12 @@
       }
       if (item.currency === "TWD") return safeNumber(item.amount);
       return getExpenseEstimatedTwd(item);
+    }
+
+    function getExpenseTwdForStats(item) {
+      const gross = getExpenseGrossTwdForStats(item);
+      const refund = getTaxRefundTwdEquivalent(item);
+      return Math.max(0, gross - refund);
     }
 
     function updateExpenseTwdPreview() {
@@ -2207,6 +2303,92 @@
         : "待確認｜結算暫以原始消費幣別與金額計算";
     }
 
+    function renderTaxRefundCurrencyOptions(preferred = "") {
+      const select = $("expenseTaxRefundCurrency");
+      if (!select || !state.trip) return;
+      const expenseCurrency = $("expenseCurrency")?.value || state.trip.primaryCurrency;
+      const choices = [...new Set([
+        expenseCurrency,
+        ...state.trip.enabledCurrencies,
+        "TWD",
+        "USD"
+      ].filter((code) => CURRENCIES[code]))];
+
+      const current = choices.includes(preferred)
+        ? preferred
+        : (choices.includes(select.value) ? select.value : expenseCurrency);
+
+      select.innerHTML = choices
+        .map((code) => `<option value="${code}">${code}｜${escapeHtml(CURRENCIES[code]?.name || code)}</option>`)
+        .join("");
+      select.value = current;
+    }
+
+    function renderTaxRefundRecipientOptions(preferred = "") {
+      const select = $("expenseTaxRefundRecipient");
+      if (!select || !state.trip) return;
+      const choices = ["FUND", ...state.trip.members];
+      const payer = $("expensePayer")?.value || "";
+      const current = choices.includes(preferred)
+        ? preferred
+        : (choices.includes(select.value) ? select.value : (choices.includes(payer) ? payer : state.trip.members[0] || "FUND"));
+
+      select.innerHTML = [
+        `<option value="FUND">公基金</option>`,
+        ...state.trip.members.map((member) => `<option value="${escapeHtml(member)}">${escapeHtml(member)}</option>`)
+      ].join("");
+      select.value = current;
+    }
+
+    function setTaxRefundMethod(method) {
+      const normalized = method === "card" ? "card" : "cash";
+      $("expenseTaxRefundMethod").value = normalized;
+      $("taxRefundMethodCashBtn").classList.toggle("active", normalized === "cash");
+      $("taxRefundMethodCashBtn").setAttribute("aria-pressed", String(normalized === "cash"));
+      $("taxRefundMethodCardBtn").classList.toggle("active", normalized === "card");
+      $("taxRefundMethodCardBtn").setAttribute("aria-pressed", String(normalized === "card"));
+      updateTaxRefundUi();
+    }
+
+    function setTaxRefundEnabled(enabled) {
+      const active = Boolean(enabled);
+      $("expenseTaxRefundEnabled").value = active ? "true" : "false";
+      $("taxRefundNoBtn").classList.toggle("active", !active);
+      $("taxRefundNoBtn").setAttribute("aria-pressed", String(!active));
+      $("taxRefundYesBtn").classList.toggle("active", active);
+      $("taxRefundYesBtn").setAttribute("aria-pressed", String(active));
+      $("taxRefundBox").classList.toggle("hidden", !active);
+
+      if (active) {
+        renderTaxRefundCurrencyOptions($("expenseTaxRefundCurrency").value || $("expenseCurrency").value);
+        renderTaxRefundRecipientOptions($("expenseTaxRefundRecipient").value || $("expensePayer").value);
+      }
+      updateTaxRefundUi();
+    }
+
+    function updateTaxRefundUi() {
+      const enabled = $("expenseTaxRefundEnabled")?.value === "true";
+      const status = $("expenseTaxRefundStatus")?.value || "pending";
+      const method = $("expenseTaxRefundMethod")?.value || "cash";
+      const dateField = $("taxRefundDateField");
+      const hint = $("taxRefundHint");
+      if (!dateField || !hint) return;
+
+      dateField.classList.toggle("hidden", !enabled || status !== "received");
+      if (!enabled) {
+        hint.textContent = "";
+        return;
+      }
+
+      if (status === "pending") {
+        hint.textContent = "待退稅不會先扣除統計與結算；實際收到後改成「已退稅」。";
+      } else {
+        hint.textContent = method === "card"
+          ? "已退稅會以實際退款金額扣除統計，並納入旅程結算。"
+          : "已退稅會以實際收到的現金扣除統計，並納入旅程結算。";
+      }
+    }
+
     function navigate(page) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       document.body.classList.remove("keyboard-open");
@@ -2253,6 +2435,19 @@
         if (!isPersonalExpense(expense)) result[currency].expense += safeNumber(expense.amount);
         if (expense.payer === "FUND") result[currency].fundSpent += safeNumber(expense.amount);
         else result[currency].personalPaid += safeNumber(expense.amount);
+
+        if (isTaxRefundReceived(expense)) {
+          const refundCurrency = getTaxRefundCurrency(expense);
+          const refundAmount = safeNumber(expense.taxRefundAmount);
+          result[refundCurrency] ||= { expense: 0, fundIn: 0, fundSpent: 0, fundBalance: 0, personalPaid: 0 };
+
+          if (!isPersonalExpense(expense) && refundCurrency === currency) {
+            result[currency].expense -= refundAmount;
+          }
+          if (expense.taxRefundRecipient === "FUND") {
+            result[refundCurrency].fundSpent -= refundAmount;
+          }
+        }
       });
       state.funds.forEach((fund) => {
         const currency = fund.currency;
@@ -2514,6 +2709,15 @@
         : state.trip.members[0] || null;
       // 每一筆新記帳預設為共同消費，避免沿用上一筆個人消費造成誤記。
       setExpenseType(false);
+
+      $("expenseTaxRefundStatus").value = "pending";
+      $("expenseTaxRefundAmount").value = "";
+      $("expenseTaxRefundDate").value = "";
+      renderTaxRefundCurrencyOptions($("expenseCurrency").value);
+      renderTaxRefundRecipientOptions($("expensePayer").value);
+      setTaxRefundMethod("cash");
+      setTaxRefundEnabled(false);
+
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
       renderReceiptPreview();
@@ -2593,6 +2797,23 @@
       const actualInput = safeNumber($("expenseActualBillAmount").value);
       const actualBillAmount = paymentMethod === "card" && actualInput > 0 ? actualInput : null;
       const expenseDate = $("expenseDate").value;
+
+      const taxRefundEnabled = $("expenseTaxRefundEnabled").value === "true";
+      const taxRefundStatus = taxRefundEnabled && $("expenseTaxRefundStatus").value === "received" ? "received" : "pending";
+      const taxRefundMethod = $("expenseTaxRefundMethod").value === "card" ? "card" : "cash";
+      const taxRefundAmount = taxRefundEnabled ? safeNumber($("expenseTaxRefundAmount").value) : 0;
+      const taxRefundCurrency = taxRefundEnabled ? ($("expenseTaxRefundCurrency").value || currency) : null;
+      const taxRefundRecipient = taxRefundEnabled ? ($("expenseTaxRefundRecipient").value || payer) : null;
+      const taxRefundDate = taxRefundEnabled && taxRefundStatus === "received"
+        ? ($("expenseTaxRefundDate").value || "")
+        : null;
+
+      if (taxRefundEnabled && taxRefundAmount <= 0) return toast("請輸入退稅金額");
+      if (taxRefundEnabled && taxRefundStatus === "received" && !taxRefundDate) return toast("請選擇實際退稅日期");
+      if (taxRefundEnabled && taxRefundCurrency === currency && taxRefundAmount > amount + 0.000001) {
+        return toast("同幣別退稅金額不可大於原消費金額");
+      }
+
       const sameBaseTransaction = original && original.currency === currency && original.date === expenseDate && Math.abs(safeNumber(original.amount) - amount) < 0.000001;
       const preserveSnapshot = sameBaseTransaction && safeNumber(original?.exchangeRateSnapshot) > 0 && safeNumber(original?.estimatedTwdAmount) > 0 && !original?.exchangeRateIsFallback;
       let exchangeRateSnapshot = preserveSnapshot ? safeNumber(original.exchangeRateSnapshot) : 0;
@@ -2640,6 +2861,41 @@
           : (state.settings?.exchangeRateUpdatedAt || new Date().toISOString());
       }
 
+      let taxRefundExchangeRateSnapshot = 0;
+      let taxRefundTwdAmount = 0;
+      let taxRefundRateSourceDate = null;
+      let taxRefundRateCapturedAt = null;
+
+      if (taxRefundEnabled && taxRefundStatus === "received" && taxRefundAmount > 0 && taxRefundCurrency) {
+        const sameRefund = original &&
+          isTaxRefundReceived(original) &&
+          getTaxRefundCurrency(original) === taxRefundCurrency &&
+          String(original.taxRefundDate || "") === String(taxRefundDate || "") &&
+          Math.abs(safeNumber(original.taxRefundAmount) - taxRefundAmount) < 0.000001;
+
+        if (sameRefund && safeNumber(original.taxRefundTwdAmount) > 0) {
+          taxRefundExchangeRateSnapshot = safeNumber(original.taxRefundExchangeRateSnapshot);
+          taxRefundTwdAmount = safeNumber(original.taxRefundTwdAmount);
+          taxRefundRateSourceDate = original.taxRefundRateSourceDate || taxRefundDate;
+          taxRefundRateCapturedAt = original.taxRefundRateCapturedAt || new Date().toISOString();
+        } else if (taxRefundCurrency === "TWD") {
+          taxRefundExchangeRateSnapshot = 1;
+          taxRefundTwdAmount = taxRefundAmount;
+          taxRefundRateSourceDate = taxRefundDate;
+          taxRefundRateCapturedAt = new Date().toISOString();
+        } else {
+          const refundRates = await resolveRatesForExpenseDate(taxRefundDate || expenseDate);
+          taxRefundExchangeRateSnapshot = safeNumber(refundRates?.rates?.[taxRefundCurrency]);
+          taxRefundTwdAmount = estimateTwdByRate(
+            taxRefundAmount,
+            taxRefundCurrency,
+            taxRefundExchangeRateSnapshot
+          );
+          taxRefundRateSourceDate = refundRates?.sourceDate || taxRefundDate;
+          taxRefundRateCapturedAt = refundRates?.fetchedAt || new Date().toISOString();
+        }
+      }
+
       const data = {
         amount,
         currency,
@@ -2668,7 +2924,27 @@
         personalOwnerId: personal ? personalOwnerId : null,
         shareMemberIds,
         date: expenseDate,
-        note: $("expenseNote").value.trim()
+        note: $("expenseNote").value.trim(),
+
+        taxRefundEnabled,
+        taxRefundStatus: taxRefundEnabled ? taxRefundStatus : null,
+        taxRefundMethod: taxRefundEnabled ? taxRefundMethod : null,
+        taxRefundCurrency: taxRefundEnabled ? taxRefundCurrency : null,
+        taxRefundAmount: taxRefundEnabled ? taxRefundAmount : null,
+        taxRefundRecipient: taxRefundEnabled ? taxRefundRecipient : null,
+        taxRefundDate: taxRefundEnabled && taxRefundStatus === "received" ? taxRefundDate : null,
+        taxRefundExchangeRateSnapshot: taxRefundEnabled && taxRefundStatus === "received"
+          ? (taxRefundExchangeRateSnapshot || null)
+          : null,
+        taxRefundTwdAmount: taxRefundEnabled && taxRefundStatus === "received"
+          ? (taxRefundTwdAmount || null)
+          : null,
+        taxRefundRateSourceDate: taxRefundEnabled && taxRefundStatus === "received"
+          ? taxRefundRateSourceDate
+          : null,
+        taxRefundRateCapturedAt: taxRefundEnabled && taxRefundStatus === "received"
+          ? taxRefundRateCapturedAt
+          : null
       };
       if (data.payer === "FUND") {
         const totals = getCurrencyTotals();
@@ -2751,6 +3027,16 @@
       state.selectedShareMembers = new Set(personal ? state.trip.members : (expense.shareMemberIds || []));
       state.selectedPersonalOwner = personal ? getPersonalExpenseOwner(expense) : null;
       setExpenseType(personal);
+
+      const refundEnabled = isTaxRefundEnabled(expense);
+      $("expenseTaxRefundStatus").value = expense.taxRefundStatus === "received" ? "received" : "pending";
+      $("expenseTaxRefundAmount").value = refundEnabled ? safeNumber(expense.taxRefundAmount) : "";
+      $("expenseTaxRefundDate").value = expense.taxRefundDate || "";
+      renderTaxRefundCurrencyOptions(expense.taxRefundCurrency || expense.currency);
+      renderTaxRefundRecipientOptions(expense.taxRefundRecipient || expense.payer);
+      setTaxRefundMethod(expense.taxRefundMethod === "card" ? "card" : "cash");
+      setTaxRefundEnabled(refundEnabled);
+
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
       resetExpenseAttachmentDraft();
@@ -3094,6 +3380,17 @@
           : estimatedTwd > 0
             ? `<div class="record-twd">約 ${formatMoney(estimatedTwd, "TWD")}</div>`
             : `<div class="record-twd">暫無台幣估算</div>`;
+
+      const refundLine = isTaxRefundEnabled(item)
+        ? `<div class="record-tax-refund ${isTaxRefundReceived(item) ? "" : "pending"}">${
+            isTaxRefundReceived(item) ? "已退稅" : "待退稅"
+          } ${formatMoney(safeNumber(item.taxRefundAmount), getTaxRefundCurrency(item))}${
+            isTaxRefundReceived(item) && item.taxRefundRecipient
+              ? ` → ${escapeHtml(item.taxRefundRecipient === "FUND" ? "公基金" : item.taxRefundRecipient)}`
+              : ""
+          }</div>`
+        : "";
+
       return `<article class="record expense-record">
         <div class="record-main">
           <div class="record-title">${escapeHtml(item.category)}${item.note ? `｜${escapeHtml(item.note)}` : ""}</div>
@@ -3109,6 +3406,7 @@
             <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
           </div>
           ${billLine}
+          ${refundLine}
           ${isCardBillPending(item) ? `<div class="record-card-status">信用卡待確認</div>` : ""}
           ${selectedMember ? `<div class="record-member-share">${escapeHtml(selectedMember)} ${personal ? "個人消費" : "分攤"}：${formatMoney(selectedMemberShare, item.currency)}</div>` : ""}
           <div class="record-actions">
@@ -3411,7 +3709,8 @@
       const currencies = [...new Set([
         ...state.trip.enabledCurrencies,
         ...state.funds.map((x) => x.currency),
-        ...settlementExpenses.map((x) => getExpenseSettlementCurrency(x))
+        ...settlementExpenses.map((x) => getExpenseSettlementCurrency(x)),
+        ...state.expenses.filter(isTaxRefundReceived).map((x) => getTaxRefundCurrency(x))
       ].filter(Boolean))];
 
       currencies.forEach((currency) => {
@@ -3445,14 +3744,46 @@
           shareMembers.forEach((member) => people[member].share += eachShare);
         });
 
+        // 已退稅視為「負消費」：
+        // 1. 每位原分攤人降低負擔；
+        // 2. 實際收到退稅的人視為已先拿回這筆錢，因此 personalPaid 扣回；
+        // 3. 若退回公基金，則直接回補公基金餘額。
+        const currencyRefunds = state.expenses.filter((item) =>
+          isTaxRefundReceived(item) && getTaxRefundCurrency(item) === currency
+        );
+        currencyRefunds.forEach((expense) => {
+          const refundAmount = safeNumber(expense.taxRefundAmount);
+          if (refundAmount <= 0) return;
+
+          const recipient = expense.taxRefundRecipient;
+          if (recipient && recipient !== "FUND" && people[recipient]) {
+            people[recipient].personalPaid -= refundAmount;
+          }
+
+          const refundShareMembers = isPersonalExpense(expense)
+            ? [getPersonalExpenseOwner(expense)].filter((member) => people[member])
+            : (expense.shareMemberIds || []).filter((member) => people[member]);
+
+          const eachRefundShare = refundShareMembers.length
+            ? refundAmount / refundShareMembers.length
+            : 0;
+          refundShareMembers.forEach((member) => {
+            people[member].share -= eachRefundShare;
+          });
+        });
+
         Object.values(people).forEach((person) => {
           person.net = person.fundPaid + person.personalPaid - person.share;
         });
 
         const totalFund = currencyFunds.reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
-        const fundSpent = currencyExpenses
+        const fundSpentGross = currencyExpenses
           .filter((item) => item.payer === "FUND")
           .reduce((sum, item) => sum + getExpenseSettlementAmount(item), 0);
+        const fundRefunded = currencyRefunds
+          .filter((item) => item.taxRefundRecipient === "FUND")
+          .reduce((sum, item) => sum + safeNumber(item.taxRefundAmount), 0);
+        const fundSpent = fundSpentGross - fundRefunded;
         let fundBalance = totalFund - fundSpent;
         const payments = [];
 
@@ -4435,6 +4766,14 @@
             ? "公基金"
             : `${item.payer || ""}・${isCreditCardExpense(item) ? `信用卡（帳單 ${escapeHtml(item.billCurrency || getActualBillCurrency(item) || "TWD")}）` : "現金"}`;
           const moneyLine = pdfMoneyLine(item);
+          const refundPdfLine = isTaxRefundEnabled(item)
+            ? `${isTaxRefundReceived(item) ? "已退稅" : "待退稅"} ${formatMoney(
+                safeNumber(item.taxRefundAmount),
+                getTaxRefundCurrency(item)
+              )}${isTaxRefundReceived(item) && item.taxRefundRecipient
+                ? ` → ${item.taxRefundRecipient === "FUND" ? "公基金" : item.taxRefundRecipient}`
+                : ""}`
+            : "";
 
           const section = document.createElement("section");
           section.style.cssText = "margin:0 0 14px;padding:12px;border:1px solid #e7e2d6;border-radius:12px;break-inside:avoid";
@@ -4448,6 +4787,7 @@
               <div style="text-align:right;white-space:nowrap">
                 <div style="font-weight:900;font-size:16px">${formatMoney(item.amount,item.currency)}</div>
                 ${moneyLine ? `<div style="font-size:11px;color:#778078">${escapeHtml(moneyLine)}</div>` : ""}
+                ${refundPdfLine ? `<div style="font-size:10px;color:${isTaxRefundReceived(item) ? "#2f6b50" : "#a46b18"}">${escapeHtml(refundPdfLine)}</div>` : ""}
                 ${isCardBillPending(item) ? `<div style="font-size:10px;color:#a46b18">信用卡待確認</div>` : ""}
               </div>
             </div>`;
@@ -4895,20 +5235,23 @@
 
       const commonExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "金額", "平均每人金額", "參考台幣",
+        "幣別", "原幣金額", "每人平均金額（原幣）", "參考台幣", "每人平均參考台幣",
         "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
       ];
       const personalExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "金額", "參考台幣",
+        "幣別", "原幣金額", "參考台幣",
         "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額"
       ];
 
       const expenseToRow = (item, includeAveragePerPerson = false) => {
         const personal = isPersonalExpense(item);
+        const sharedMembers = personal ? [] : getSharedExpenseMembers(item);
         const allocationMembers = personal
           ? getPersonalExpenseOwner(item)
-          : getSharedExpenseMembers(item).join("、");
+          : sharedMembers.join("、");
+
+        const referenceTwd = roundReferenceTwd(getExpenseTwdForStats(item));
 
         const base = [
           item.date,
@@ -4920,11 +5263,16 @@
           safeNumber(item.amount)
         ];
 
-        if (includeAveragePerPerson) base.push(getAveragePerPersonAmount(item));
+        if (includeAveragePerPerson) {
+          base.push(getAveragePerPersonAmount(item));
+          base.push(referenceTwd);
+          base.push(sharedMembers.length ? roundReferenceTwd(referenceTwd / sharedMembers.length) : 0);
+        } else {
+          base.push(referenceTwd);
+        }
 
         return [
           ...base,
-          roundReferenceTwd(getExpenseTwdForStats(item)),
           item.payer === "FUND" ? "公基金" : (item.payer || ""),
           item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
           hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
@@ -4951,7 +5299,7 @@
         sheet["!cols"] = includeAveragePerPerson
           ? [
               { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
-              { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+              { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
               { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
             ]
           : [
@@ -5448,6 +5796,22 @@
     $("expenseForm").addEventListener("submit", saveExpense);
     $("expenseTypeShared").addEventListener("click", () => setExpenseType(false));
     $("expenseTypePersonal").addEventListener("click", () => setExpenseType(true));
+
+    $("taxRefundNoBtn").addEventListener("click", () => setTaxRefundEnabled(false));
+    $("taxRefundYesBtn").addEventListener("click", () => {
+      if (!$("expenseTaxRefundDate").value) $("expenseTaxRefundDate").value = today();
+      renderTaxRefundCurrencyOptions($("expenseTaxRefundCurrency").value || $("expenseCurrency").value);
+      renderTaxRefundRecipientOptions($("expenseTaxRefundRecipient").value || $("expensePayer").value);
+      setTaxRefundEnabled(true);
+    });
+    $("taxRefundMethodCashBtn").addEventListener("click", () => setTaxRefundMethod("cash"));
+    $("taxRefundMethodCardBtn").addEventListener("click", () => setTaxRefundMethod("card"));
+    $("expenseTaxRefundStatus").addEventListener("change", () => {
+      if ($("expenseTaxRefundStatus").value === "received" && !$("expenseTaxRefundDate").value) {
+        $("expenseTaxRefundDate").value = today();
+      }
+      updateTaxRefundUi();
+    });
     $("paymentMethodCash").addEventListener("click", () => {
       $("expenseActualBillAmount").value = "";
       $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
@@ -5473,12 +5837,18 @@
     });
     $("expenseCurrency").addEventListener("change", () => {
       syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      if ($("expenseTaxRefundEnabled").value !== "true") {
+        renderTaxRefundCurrencyOptions($("expenseCurrency").value);
+      }
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expenseDate").addEventListener("change", updateExpenseTwdPreview);
     $("expensePayer").addEventListener("change", () => {
       updatePaymentMethodUi();
+      if ($("expenseTaxRefundEnabled").value !== "true") {
+        renderTaxRefundRecipientOptions($("expensePayer").value);
+      }
       if ($("expenseIsPersonal").value === "true" && state.trip.members.includes($("expensePayer").value)) {
         state.selectedPersonalOwner = $("expensePayer").value;
         renderShareMemberChips();
