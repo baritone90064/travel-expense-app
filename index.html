@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v56：Excel 消費明細加入退稅欄位、新增退稅明細工作表與退稅統計 -->
+  <!-- iPhone 修正版 v57：修正 Excel 匯出成員退稅函式作用域錯誤，並加入完整匯出錯誤處理 -->
 
   <style>
     :root {
@@ -5133,8 +5133,9 @@
         console.error("Excel module load failed:", error);
         return toast("Excel 元件載入失敗，請確認網路後重試");
       }
-      const settlement = calculateSettlementData();
-      const wb = XLSX.utils.book_new();
+      try {
+        const settlement = calculateSettlementData();
+        const wb = XLSX.utils.book_new();
 
       const tripRows = [
         ["項目", "內容"],
@@ -5247,14 +5248,7 @@
         return roundReferenceTwd(twd / members.length);
       };
 
-      const buildMemberSummaryRows = (items, mode, title) => {
-        const currencies = getExcelSummaryCurrencies(items);
-        const rows = [
-          [title],
-          ["成員", ...currencies, "淨參考台幣合計"]
-        ];
-
-        const getMemberRefundTwdShareRounded = (item, member) => {
+      const getMemberRefundTwdShareRounded = (item, member) => {
         if (!isTaxRefundReceived(item)) return 0;
         const refundTwd = getTaxRefundTwdEquivalent(item);
 
@@ -5268,6 +5262,13 @@
         if (!members.includes(member) || !members.length) return 0;
         return roundReferenceTwd(refundTwd / members.length);
       };
+
+      const buildMemberSummaryRows = (items, mode, title) => {
+        const currencies = getExcelSummaryCurrencies(items);
+        const rows = [
+          [title],
+          ["成員", ...currencies, "淨參考台幣合計"]
+        ];
 
       state.trip.members.forEach((member) => {
           const currencyTotals = Object.fromEntries(currencies.map((currency) => [currency, 0]));
@@ -5915,8 +5916,12 @@
       const exportScopeLabel = includePersonalExpenses ? "含個人消費" : "不含個人消費";
       const filename = `${state.trip.name || "旅行記帳"}_${exportScopeLabel}_${today()}.xlsx`
         .replace(/[\\/:*?"<>|]/g, "-");
-      XLSX.writeFile(wb, filename, { cellStyles: true });
-      toast("Excel 已匯出");
+        XLSX.writeFile(wb, filename, { cellStyles: true });
+        toast("Excel 已匯出");
+      } catch (error) {
+        console.error("Excel export failed:", error);
+        toast("Excel 匯出失敗，請重新整理後再試");
+      }
     }
 
     document.addEventListener("click", async (event) => {
