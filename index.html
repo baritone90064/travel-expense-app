@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v57：修正 Excel 匯出成員退稅函式作用域錯誤，並加入完整匯出錯誤處理 -->
+  <!-- iPhone 修正版 v58：信用卡新增實際刷卡交易三層資料，Excel 保留原消費/實際刷卡/實際帳單 -->
 
   <style>
     :root {
@@ -191,6 +191,10 @@
     .card-billing-box label { margin-bottom: 6px; }
     .card-billing-grid { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 9px; }
     .card-billing-status { margin-top: 6px; color: var(--warning); font-size: 11px; font-weight: 760; line-height: 1.4; }
+    .card-transaction-segments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card-transaction-segments .segment { font-size: 12px; padding-left: 3px; padding-right: 3px; }
+    .card-transaction-fields { margin-top: 9px; }
+    .card-section-label { margin-top: 13px; }
 
     .tax-refund-box {
       margin-top: 9px; padding: 11px 12px; border: 1px solid #d9e9df;
@@ -822,7 +826,24 @@
               <button id="paymentMethodCard" class="segment" type="button" aria-pressed="false">信用卡</button>
             </div>
             <div id="creditCardBillingBox" class="card-billing-box hidden">
-              <label for="expenseActualBillAmount">信用卡帳單實際金額</label>
+              <label>實際刷卡交易</label>
+              <input id="expenseCardTransactionMode" type="hidden" value="same" />
+              <div class="segmented card-transaction-segments" role="group" aria-label="實際刷卡交易">
+                <button id="cardTransactionSameBtn" class="segment active" type="button" aria-pressed="true">與原消費相同</button>
+                <button id="cardTransactionPendingBtn" class="segment" type="button" aria-pressed="false">待確認</button>
+                <button id="cardTransactionOtherBtn" class="segment" type="button" aria-pressed="false">其他幣別</button>
+              </div>
+
+              <div id="actualCardTransactionFields" class="card-transaction-fields hidden">
+                <label for="expenseActualCardAmount">實際刷卡幣別／金額</label>
+                <div class="card-billing-grid">
+                  <select id="expenseActualCardCurrency" aria-label="實際刷卡幣別"></select>
+                  <input id="expenseActualCardAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" />
+                </div>
+              </div>
+              <div id="creditCardTransactionStatus" class="card-billing-status"></div>
+
+              <label class="card-section-label" for="expenseActualBillAmount">信用卡帳單實際金額</label>
               <div class="card-billing-grid">
                 <select id="expenseBillCurrency" aria-label="帳單幣別"></select>
                 <input id="expenseActualBillAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="尚未入帳可先留空" />
@@ -2134,6 +2155,58 @@
       return item?.paymentMethod === "card";
     }
 
+    function getCardTransactionMode(item) {
+      if (!isCreditCardExpense(item)) return "";
+      if (["same", "pending", "other"].includes(item?.cardTransactionMode)) {
+        return item.cardTransactionMode;
+      }
+      if (item?.actualCardCurrency && safeNumber(item?.actualCardAmount) > 0) {
+        const sameCurrency = item.actualCardCurrency === item.currency;
+        const sameAmount = Math.abs(safeNumber(item.actualCardAmount) - safeNumber(item.amount)) < 0.000001;
+        return sameCurrency && sameAmount ? "same" : "other";
+      }
+      // 舊版信用卡資料原本就是以消費幣別/金額代表刷卡交易。
+      return "same";
+    }
+
+    function getActualCardCurrency(item) {
+      if (!isCreditCardExpense(item)) return "";
+      const mode = getCardTransactionMode(item);
+      if (mode === "pending") return "";
+      if (mode === "same") return item?.currency || "";
+      return item?.actualCardCurrency && CURRENCIES[item.actualCardCurrency]
+        ? item.actualCardCurrency
+        : "";
+    }
+
+    function getActualCardAmount(item) {
+      if (!isCreditCardExpense(item)) return 0;
+      const mode = getCardTransactionMode(item);
+      if (mode === "pending") return 0;
+      if (mode === "same") return safeNumber(item?.amount);
+      return safeNumber(item?.actualCardAmount);
+    }
+
+    function hasActualCardTransaction(item) {
+      return isCreditCardExpense(item) &&
+        Boolean(getActualCardCurrency(item)) &&
+        getActualCardAmount(item) > 0;
+    }
+
+    function getActualCardTwdEquivalent(item) {
+      if (!hasActualCardTransaction(item)) return 0;
+      if (getCardTransactionMode(item) === "same") return getExpenseEstimatedTwd(item);
+
+      const currency = getActualCardCurrency(item);
+      const amount = getActualCardAmount(item);
+      if (currency === "TWD") return amount;
+
+      const frozen = safeNumber(item?.actualCardTwdAmount);
+      if (frozen > 0) return frozen;
+      const rate = safeNumber(item?.actualCardExchangeRateSnapshot) || getCurrentExchangeRate(currency);
+      return estimateTwdByRate(amount, currency, rate);
+    }
+
     function getActualBillCurrency(item) {
       if (!isCreditCardExpense(item)) return "";
       if (item?.billCurrency && CURRENCIES[item.billCurrency]) return item.billCurrency;
@@ -2158,11 +2231,15 @@
     }
 
     function getExpenseSettlementCurrency(item) {
-      return hasActualCardBill(item) ? getActualBillCurrency(item) : item?.currency;
+      if (hasActualCardBill(item)) return getActualBillCurrency(item);
+      if (hasActualCardTransaction(item)) return getActualCardCurrency(item);
+      return item?.currency;
     }
 
     function getExpenseSettlementAmount(item) {
-      return hasActualCardBill(item) ? getActualBillAmount(item) : safeNumber(item?.amount);
+      if (hasActualCardBill(item)) return getActualBillAmount(item);
+      if (hasActualCardTransaction(item)) return getActualCardAmount(item);
+      return safeNumber(item?.amount);
     }
 
     function getActualBillTwdEquivalent(item) {
@@ -2205,10 +2282,17 @@
 
     function getExpenseGrossTwdForStats(item) {
       if (!item) return 0;
+
       if (hasActualCardBill(item)) {
         const actualTwd = getActualBillTwdEquivalent(item);
         if (actualTwd > 0) return actualTwd;
       }
+
+      if (hasActualCardTransaction(item)) {
+        const transactionTwd = getActualCardTwdEquivalent(item);
+        if (transactionTwd > 0) return transactionTwd;
+      }
+
       if (item.currency === "TWD") return safeNumber(item.amount);
       return getExpenseEstimatedTwd(item);
     }
@@ -2262,29 +2346,143 @@
       select.value = current;
     }
 
+    function renderActualCardCurrencyOptions(preferred = "") {
+      const select = $("expenseActualCardCurrency");
+      if (!select) return;
+
+      const originalCurrency = $("expenseCurrency")?.value || state.trip?.primaryCurrency || "TWD";
+      const choices = [...new Set([
+        originalCurrency,
+        ...(state.trip?.enabledCurrencies || []),
+        ...Object.keys(CURRENCIES || {}),
+        "TWD",
+        "USD"
+      ])].filter((code) => CURRENCIES[code]);
+
+      const current = choices.includes(preferred)
+        ? preferred
+        : (choices.includes(select.value) ? select.value : originalCurrency);
+
+      select.innerHTML = choices
+        .map((code) => `<option value="${code}">${code}｜${escapeHtml(CURRENCIES[code]?.name || code)}</option>`)
+        .join("");
+      select.value = current;
+    }
+
+    function getFormCardTransactionMode() {
+      const mode = $("expenseCardTransactionMode")?.value;
+      return ["same", "pending", "other"].includes(mode) ? mode : "same";
+    }
+
+    function getFormActualCardCurrency() {
+      if ($("expensePaymentMethod")?.value !== "card") return "";
+      const mode = getFormCardTransactionMode();
+      if (mode === "pending") return "";
+      if (mode === "same") return $("expenseCurrency")?.value || "";
+      return $("expenseActualCardCurrency")?.value || "";
+    }
+
+    function getFormActualCardAmount() {
+      if ($("expensePaymentMethod")?.value !== "card") return 0;
+      const mode = getFormCardTransactionMode();
+      if (mode === "pending") return 0;
+      if (mode === "same") return safeNumber($("expenseAmount")?.value);
+      return safeNumber($("expenseActualCardAmount")?.value);
+    }
+
+    function setCardTransactionMode(mode, options = {}) {
+      const normalized = ["same", "pending", "other"].includes(mode) ? mode : "same";
+      $("expenseCardTransactionMode").value = normalized;
+
+      [
+        ["cardTransactionSameBtn", "same"],
+        ["cardTransactionPendingBtn", "pending"],
+        ["cardTransactionOtherBtn", "other"]
+      ].forEach(([id, value]) => {
+        const active = normalized === value;
+        $(id).classList.toggle("active", active);
+        $(id).setAttribute("aria-pressed", String(active));
+      });
+
+      $("actualCardTransactionFields").classList.toggle("hidden", normalized !== "other");
+
+      if (normalized === "same") {
+        renderActualCardCurrencyOptions($("expenseCurrency")?.value || "");
+        $("expenseActualCardCurrency").value = $("expenseCurrency")?.value || "";
+        $("expenseActualCardAmount").value = safeNumber($("expenseAmount")?.value) > 0
+          ? String(safeNumber($("expenseAmount").value))
+          : "";
+      } else if (normalized === "pending") {
+        $("expenseActualCardAmount").value = "";
+      } else {
+        renderActualCardCurrencyOptions(
+          options.preferredCurrency ||
+          $("expenseActualCardCurrency")?.value ||
+          $("expenseCurrency")?.value ||
+          "TWD"
+        );
+        if (options.preferredAmount !== undefined && options.preferredAmount !== null) {
+          $("expenseActualCardAmount").value = safeNumber(options.preferredAmount) > 0
+            ? String(safeNumber(options.preferredAmount))
+            : "";
+        }
+      }
+
+      updateCardTransactionUi();
+    }
+
+    function updateCardTransactionUi() {
+      const status = $("creditCardTransactionStatus");
+      if (!status) return;
+
+      const cardPaid = $("expensePaymentMethod")?.value === "card" && $("expensePayer")?.value !== "FUND";
+      if (!cardPaid) {
+        status.textContent = "";
+        return;
+      }
+
+      const mode = getFormCardTransactionMode();
+      if (mode === "pending") {
+        status.textContent = "實際刷卡幣別／金額待確認";
+        return;
+      }
+
+      const currency = getFormActualCardCurrency();
+      const amount = getFormActualCardAmount();
+      if (currency && amount > 0) {
+        status.textContent = `實際刷卡：${formatMoney(amount, currency)}`;
+      } else if (mode === "other") {
+        status.textContent = "請輸入實際刷卡幣別與金額";
+      } else {
+        status.textContent = "實際刷卡將與原消費幣別／金額相同";
+      }
+    }
+
     function syncSameCurrencyCardBillAmount(options = {}) {
-      const amountInput = $("expenseAmount");
       const actualInput = $("expenseActualBillAmount");
-      const expenseCurrency = $("expenseCurrency")?.value || "";
       const billCurrency = $("expenseBillCurrency")?.value || "";
       const cardPaid = $("expensePaymentMethod")?.value === "card" && $("expensePayer")?.value !== "FUND";
 
-      if (!amountInput || !actualInput || !cardPaid) return false;
+      if (!actualInput || !cardPaid) return false;
 
-      const sameCurrency = expenseCurrency && billCurrency && expenseCurrency === billCurrency;
-      const amount = safeNumber(amountInput.value);
+      const transactionCurrency = getFormActualCardCurrency();
+      const transactionAmount = getFormActualCardAmount();
+      const sameCurrency = transactionCurrency && billCurrency && transactionCurrency === billCurrency;
 
-      if (sameCurrency) {
-        if (amount > 0 && (options.force === true || !String(actualInput.value || "").trim())) {
-          actualInput.value = String(amount);
+      if (sameCurrency && transactionAmount > 0) {
+        if (
+          options.force === true ||
+          !String(actualInput.value || "").trim() ||
+          actualInput.dataset.autoFilledFromExpense === "true"
+        ) {
+          actualInput.value = String(transactionAmount);
           actualInput.dataset.autoFilledFromExpense = "true";
           return true;
         }
         return false;
       }
 
-      // 切換成不同帳單幣別時，實際帳單金額需重新輸入。
-      if (options.clearWhenDifferent === true) {
+      if (options.clearWhenDifferent === true && actualInput.dataset.autoFilledFromExpense === "true") {
         actualInput.value = "";
         actualInput.dataset.autoFilledFromExpense = "false";
       }
@@ -2305,22 +2503,37 @@
         $("paymentMethodCash").setAttribute("aria-pressed", "true");
         cardButton.classList.remove("active");
         cardButton.setAttribute("aria-pressed", "false");
+        $("expenseActualCardAmount").value = "";
         $("expenseActualBillAmount").value = "";
       }
 
       const cardPaid = $("expensePaymentMethod").value === "card" && !fundPaid;
       box.classList.toggle("hidden", !cardPaid);
       if (!cardPaid) {
+        $("creditCardTransactionStatus").textContent = "";
         $("creditCardBillingStatus").textContent = "";
         return;
       }
+
+      if (!$("expenseActualCardCurrency").options.length) {
+        renderActualCardCurrencyOptions($("expenseCurrency").value);
+      }
       if (!$("expenseBillCurrency").options.length) renderBillCurrencyOptions("TWD");
+
+      updateCardTransactionUi();
       syncSameCurrencyCardBillAmount();
+
       const actual = safeNumber($("expenseActualBillAmount").value);
       const billCurrency = $("expenseBillCurrency").value || "TWD";
-      $("creditCardBillingStatus").textContent = actual > 0
-        ? `已填入實際帳單：${formatMoney(actual, billCurrency)}`
-        : "待確認｜結算暫以原始消費幣別與金額計算";
+      if (actual > 0) {
+        $("creditCardBillingStatus").textContent = `已填入實際帳單：${formatMoney(actual, billCurrency)}`;
+      } else if (getFormActualCardCurrency() && getFormActualCardAmount() > 0) {
+        $("creditCardBillingStatus").textContent =
+          `帳單待確認｜暫以實際刷卡 ${formatMoney(getFormActualCardAmount(), getFormActualCardCurrency())} 計算`;
+      } else {
+        $("creditCardBillingStatus").textContent =
+          "帳單待確認｜實際刷卡交易也待確認，暫以原消費幣別與金額計算";
+      }
     }
 
     function getDefaultTaxRefundDate() {
@@ -2708,9 +2921,12 @@
       const last = loadLastEntry();
       $("expenseCurrency").value = state.trip.enabledCurrencies.includes(last?.currency) ? last.currency : state.trip.primaryCurrency;
       $("expensePayer").value = ["FUND", ...state.trip.members].includes(last?.payer) ? last.payer : "FUND";
+      renderActualCardCurrencyOptions($("expenseCurrency").value);
+      $("expenseActualCardAmount").value = "";
       renderBillCurrencyOptions(["TWD", "USD"].includes(last?.billCurrency) ? last.billCurrency : "TWD");
       $("expenseActualBillAmount").value = "";
       $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+      setCardTransactionMode("same");
       setPaymentMethod($("expensePayer").value === "FUND" ? "cash" : (last?.paymentMethod === "card" ? "card" : "cash"));
       const validLastMembers = (last?.shareMemberIds || []).filter((member) => state.trip.members.includes(member));
       state.selectedShareMembers = new Set(validLastMembers.length ? validLastMembers : state.trip.members);
@@ -2801,6 +3017,21 @@
       const currency = $("expenseCurrency").value;
       const payer = $("expensePayer").value;
       const paymentMethod = payer === "FUND" ? "cash" : ($("expensePaymentMethod").value === "card" ? "card" : "cash");
+      const cardTransactionMode = paymentMethod === "card"
+        ? getFormCardTransactionMode()
+        : null;
+      const actualCardCurrency = paymentMethod === "card" && cardTransactionMode !== "pending"
+        ? getFormActualCardCurrency()
+        : null;
+      const actualCardAmount = paymentMethod === "card" && cardTransactionMode !== "pending"
+        ? getFormActualCardAmount()
+        : null;
+
+      if (paymentMethod === "card" && cardTransactionMode === "other") {
+        if (!actualCardCurrency) return toast("請選擇實際刷卡幣別");
+        if (!(safeNumber(actualCardAmount) > 0)) return toast("請輸入實際刷卡金額");
+      }
+
       const billCurrency = paymentMethod === "card" && ["TWD", "USD"].includes($("expenseBillCurrency").value)
         ? $("expenseBillCurrency").value
         : null;
@@ -2848,6 +3079,61 @@
         exchangeRateIsFallback = Boolean(resolvedRates?.isFallback);
         exchangeRateCapturedAt = resolvedRates?.fetchedAt || new Date().toISOString();
       }
+      const previousCardMode = getCardTransactionMode(original);
+      const previousCardCurrency = getActualCardCurrency(original);
+      const previousCardAmount = getActualCardAmount(original);
+      const actualCardChanged =
+        previousCardMode !== (cardTransactionMode || "") ||
+        previousCardCurrency !== (actualCardCurrency || "") ||
+        Math.abs(previousCardAmount - safeNumber(actualCardAmount)) > 0.000001 ||
+        String(original?.date || "") !== String(expenseDate || "");
+
+      let actualCardExchangeRateSnapshot = 0;
+      let actualCardTwdAmount = 0;
+      let actualCardRateSourceDate = null;
+      let actualCardRateCapturedAt = null;
+
+      if (
+        paymentMethod === "card" &&
+        cardTransactionMode !== "pending" &&
+        actualCardCurrency &&
+        safeNumber(actualCardAmount) > 0
+      ) {
+        if (cardTransactionMode === "same") {
+          actualCardExchangeRateSnapshot = exchangeRateSnapshot || null;
+          actualCardTwdAmount = estimatedTwdAmount || null;
+          actualCardRateSourceDate = exchangeRateSourceDate || expenseDate;
+          actualCardRateCapturedAt = exchangeRateCapturedAt || new Date().toISOString();
+        } else {
+          const preserveActualCardSnapshot =
+            !actualCardChanged &&
+            original &&
+            safeNumber(original.actualCardTwdAmount) > 0;
+
+          if (preserveActualCardSnapshot) {
+            actualCardExchangeRateSnapshot = safeNumber(original.actualCardExchangeRateSnapshot);
+            actualCardTwdAmount = safeNumber(original.actualCardTwdAmount);
+            actualCardRateSourceDate = original.actualCardRateSourceDate || expenseDate;
+            actualCardRateCapturedAt = original.actualCardRateCapturedAt || new Date().toISOString();
+          } else if (actualCardCurrency === "TWD") {
+            actualCardExchangeRateSnapshot = 1;
+            actualCardTwdAmount = safeNumber(actualCardAmount);
+            actualCardRateSourceDate = expenseDate;
+            actualCardRateCapturedAt = new Date().toISOString();
+          } else {
+            const cardRates = await resolveRatesForExpenseDate(expenseDate);
+            actualCardExchangeRateSnapshot = safeNumber(cardRates?.rates?.[actualCardCurrency]);
+            actualCardTwdAmount = estimateTwdByRate(
+              actualCardAmount,
+              actualCardCurrency,
+              actualCardExchangeRateSnapshot
+            );
+            actualCardRateSourceDate = cardRates?.sourceDate || expenseDate;
+            actualCardRateCapturedAt = cardRates?.fetchedAt || new Date().toISOString();
+          }
+        }
+      }
+
       const previousBillCurrency = getActualBillCurrency(original);
       const previousBillAmount = getActualBillAmount(original);
       const actualChanged = previousBillCurrency !== (actualBillAmount ? billCurrency : "") ||
@@ -2916,6 +3202,26 @@
         exchangeRateSourceDate: exchangeRateSourceDate || null,
         exchangeRateIsFallback,
         exchangeRateCapturedAt: exchangeRateCapturedAt || new Date().toISOString(),
+        cardTransactionMode: paymentMethod === "card" ? cardTransactionMode : null,
+        actualCardCurrency: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? (actualCardCurrency || null)
+          : null,
+        actualCardAmount: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? (safeNumber(actualCardAmount) || null)
+          : null,
+        actualCardExchangeRateSnapshot: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? (actualCardExchangeRateSnapshot || null)
+          : null,
+        actualCardTwdAmount: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? (actualCardTwdAmount || null)
+          : null,
+        actualCardRateSourceDate: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? actualCardRateSourceDate
+          : null,
+        actualCardRateCapturedAt: paymentMethod === "card" && cardTransactionMode !== "pending"
+          ? actualCardRateCapturedAt
+          : null,
+
         billCurrency: ["TWD", "USD"].includes($("expenseBillCurrency").value) ? $("expenseBillCurrency").value : "TWD",
         actualBillAmount,
         actualBillExchangeRateSnapshot: actualBillAmount ? (actualBillExchangeRateSnapshot || null) : null,
@@ -3026,10 +3332,23 @@
       $("expenseAmount").value = expense.amount;
       $("expenseCurrency").value = expense.currency;
       $("expensePayer").value = expense.payer;
+
+      renderActualCardCurrencyOptions(getActualCardCurrency(expense) || expense.currency);
+      $("expenseActualCardAmount").value = getActualCardAmount(expense) > 0 ? getActualCardAmount(expense) : "";
+
       renderBillCurrencyOptions(getActualBillCurrency(expense) || expense.billCurrency || "TWD");
       $("expenseActualBillAmount").value = getActualBillAmount(expense) > 0 ? getActualBillAmount(expense) : "";
       $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+
       setPaymentMethod(expense.payer === "FUND" ? "cash" : (expense.paymentMethod === "card" ? "card" : "cash"));
+      if (expense.paymentMethod === "card" && expense.payer !== "FUND") {
+        setCardTransactionMode(getCardTransactionMode(expense), {
+          preferredCurrency: getActualCardCurrency(expense) || expense.currency,
+          preferredAmount: getActualCardAmount(expense)
+        });
+      } else {
+        setCardTransactionMode("same");
+      }
       $("expenseCategory").value = expense.category;
       $("expenseDate").value = expense.date;
       $("expenseNote").value = expense.note || "";
@@ -3086,6 +3405,7 @@
       return [
         item.date, item.category, item.note, item.currency, item.amount,
         payerText, owner, ...members, paymentText, typeText,
+        getActualCardCurrency(item), getActualCardAmount(item),
         item.billCurrency, getActualBillAmount(item)
       ].filter((value) => value !== undefined && value !== null && String(value).trim())
         .join(" ")
@@ -3414,15 +3734,26 @@
       const selectedMember = state.filters.shareMember;
       const selectedMemberShare = getExpenseShareAmount(item, selectedMember);
       const estimatedTwd = getExpenseEstimatedTwd(item);
+      const actualCardCurrency = getActualCardCurrency(item);
+      const actualCardAmount = getActualCardAmount(item);
       const billCurrency = getActualBillCurrency(item);
       const actualBillAmount = getActualBillAmount(item);
+
+      const cardTransactionLine = isCreditCardExpense(item)
+        ? (getCardTransactionMode(item) === "pending"
+          ? `<div class="record-twd">實際刷卡：待確認</div>`
+          : hasActualCardTransaction(item)
+            ? `<div class="record-twd">實際刷卡 ${formatMoney(actualCardAmount, actualCardCurrency)}</div>`
+            : "")
+        : "";
+
       const billLine = hasActualCardBill(item)
         ? `<div class="record-twd actual">帳單 ${formatMoney(actualBillAmount, billCurrency)}</div>`
-        : item.currency === "TWD"
-          ? ""
-          : estimatedTwd > 0
+        : (!isCreditCardExpense(item) && item.currency !== "TWD")
+          ? (estimatedTwd > 0
             ? `<div class="record-twd">約 ${formatMoney(estimatedTwd, "TWD")}</div>`
-            : `<div class="record-twd">暫無台幣估算</div>`;
+            : `<div class="record-twd">暫無台幣估算</div>`)
+          : "";
 
       const refundLine = isTaxRefundEnabled(item)
         ? `<div class="record-tax-refund ${isTaxRefundReceived(item) ? "" : "pending"}">${
@@ -3448,6 +3779,7 @@
             <span class="record-payment-icon" aria-label="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}" title="${isCreditCardExpense(item) ? "信用卡付款" : "現金付款"}">${isCreditCardExpense(item) ? ICON_CARD : ICON_CASH}</span>
             <div class="record-amount">${formatMoney(item.amount, item.currency)}</div>
           </div>
+          ${cardTransactionLine}
           ${billLine}
           ${refundLine}
           ${isCardBillPending(item) ? `<div class="record-card-status">信用卡待確認</div>` : ""}
@@ -3958,7 +4290,7 @@
               <span class="settlement-fund-value">${formatMoney(section.fundBalanceOriginal, currency)}</span>
             </div>
           </div>
-          ${section.pendingCardCount ? `<div class="hint">${section.pendingCardCount} 筆信用卡待確認，暫以原幣結算</div>` : ""}
+          ${section.pendingCardCount ? `<div class="hint">${section.pendingCardCount} 筆信用卡帳單待確認，暫以實際刷卡交易（若已知）或原消費計算</div>` : ""}
           ${peopleRows}
           <h3 style="margin-top:16px">付款建議</h3>
           ${payments}
@@ -4702,10 +5034,24 @@
       });
     }
 
+    function pdfCardTransactionLine(item) {
+      if (!isCreditCardExpense(item)) return "";
+      if (getCardTransactionMode(item) === "pending") return "實際刷卡：待確認";
+      if (!hasActualCardTransaction(item)) return "";
+      return `實際刷卡 ${formatMoney(getActualCardAmount(item), getActualCardCurrency(item))}`;
+    }
+
     function pdfMoneyLine(item) {
       if (hasActualCardBill(item)) {
         const currency = getActualBillCurrency(item);
         return `帳單實際 ${formatMoney(getActualBillAmount(item), currency)}`;
+      }
+      if (hasActualCardTransaction(item)) {
+        const currency = getActualCardCurrency(item);
+        const twd = getActualCardTwdEquivalent(item);
+        return currency === "TWD"
+          ? ""
+          : (twd > 0 ? `實際刷卡預估折合 約 ${formatMoney(twd, "TWD")}` : "實際刷卡預估折合：暫無匯率");
       }
       if (item.currency === "TWD") return "";
       const estimated = getExpenseEstimatedTwd(item);
@@ -4781,7 +5127,7 @@
           : `<div style="color:#778078">不需要額外付款</div>`;
         return `<div style="min-width:0;padding:10px 12px;border:1px solid #e7e2d6;border-radius:10px;break-inside:avoid">
           <div style="font-weight:800;margin-bottom:4px">${escapeHtml(currency)} 結算</div>
-          ${section.pendingCardCount ? `<div style="font-size:11px;color:#a46b18;margin-bottom:4px">${section.pendingCardCount} 筆信用卡待確認，暫以原幣計算</div>` : ""}
+          ${section.pendingCardCount ? `<div style="font-size:11px;color:#a46b18;margin-bottom:4px">${section.pendingCardCount} 筆信用卡帳單待確認，暫以實際刷卡交易（若已知）或原消費計算</div>` : ""}
           ${paymentRows}
         </div>`;
       }).join("");
@@ -4840,6 +5186,7 @@
           const payment = item.payer === "FUND"
             ? "公基金"
             : `${item.payer || ""}・${isCreditCardExpense(item) ? `信用卡（帳單 ${escapeHtml(item.billCurrency || getActualBillCurrency(item) || "TWD")}）` : "現金"}`;
+          const cardTransactionPdfLine = pdfCardTransactionLine(item);
           const moneyLine = pdfMoneyLine(item);
           const refundPdfLine = isTaxRefundEnabled(item)
             ? `${isTaxRefundReceived(item) ? "已退稅" : "待退稅"} ${formatMoney(
@@ -4861,6 +5208,7 @@
               </div>
               <div style="text-align:right;white-space:nowrap">
                 <div style="font-weight:900;font-size:16px">${formatMoney(item.amount,item.currency)}</div>
+                ${cardTransactionPdfLine ? `<div style="font-size:11px;color:#778078">${escapeHtml(cardTransactionPdfLine)}</div>` : ""}
                 ${moneyLine ? `<div style="font-size:11px;color:#778078">${escapeHtml(moneyLine)}</div>` : ""}
                 ${refundPdfLine ? `<div style="font-size:10px;color:${isTaxRefundReceived(item) ? "#2f6b50" : "#a46b18"}">${escapeHtml(refundPdfLine)}</div>` : ""}
                 ${isCardBillPending(item) ? `<div style="font-size:10px;color:#a46b18">信用卡待確認</div>` : ""}
@@ -5370,14 +5718,20 @@
 
       const commonExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "原幣金額", "每人平均金額（原幣）", "參考台幣", "每人平均參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        "原消費幣別", "原消費金額", "每人平均金額（原幣）",
+        "實際刷卡幣別", "實際刷卡金額",
+        "帳單幣別", "實際帳單金額",
+        "參考台幣", "每人平均參考台幣",
+        "支付者", "付款方式",
         ...refundExpenseHeaders
       ];
       const personalExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "原幣金額", "參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        "原消費幣別", "原消費金額",
+        "實際刷卡幣別", "實際刷卡金額",
+        "帳單幣別", "實際帳單金額",
+        "參考台幣",
+        "支付者", "付款方式",
         ...refundExpenseHeaders
       ];
 
@@ -5387,10 +5741,9 @@
         const allocationMembers = personal
           ? getPersonalExpenseOwner(item)
           : sharedMembers.join("、");
-
         const grossReferenceTwd = getExcelGrossReferenceTwd(item);
 
-        const base = [
+        const row = [
           item.date,
           item.category,
           item.note || "",
@@ -5400,22 +5753,26 @@
           safeNumber(item.amount)
         ];
 
-        if (includeAveragePerPerson) {
-          base.push(getAveragePerPersonAmount(item));
-          base.push(grossReferenceTwd);
-          base.push(sharedMembers.length ? roundReferenceTwd(grossReferenceTwd / sharedMembers.length) : 0);
-        } else {
-          base.push(grossReferenceTwd);
-        }
+        if (includeAveragePerPerson) row.push(getAveragePerPersonAmount(item));
 
-        return [
-          ...base,
-          item.payer === "FUND" ? "公基金" : (item.payer || ""),
-          item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
+        row.push(
+          isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardCurrency(item) : "",
+          isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardAmount(item) : "",
           hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
           hasActualCardBill(item) ? getActualBillAmount(item) : "",
+          grossReferenceTwd
+        );
+
+        if (includeAveragePerPerson) {
+          row.push(sharedMembers.length ? roundReferenceTwd(grossReferenceTwd / sharedMembers.length) : 0);
+        }
+
+        row.push(
+          item.payer === "FUND" ? "公基金" : (item.payer || ""),
+          item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
           ...getExcelRefundFields(item)
-        ];
+        );
+        return row;
       };
 
       const appendExpenseSheet = (name, items, options = {}) => {
@@ -5436,16 +5793,18 @@
         const sheet = XLSX.utils.aoa_to_sheet(rows);
         sheet["!cols"] = includeAveragePerPerson
           ? [
-              { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
-              { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
-              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+              { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
+              { wch: 12 }, { wch: 14 }, { wch: 18 },
+              { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
+              { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 12 },
               { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
               { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }
             ]
           : [
-              { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 },
-              { wch: 24 }, { wch: 9 }, { wch: 14 }, { wch: 14 },
-              { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+              { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
+              { wch: 12 }, { wch: 14 },
+              { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
+              { wch: 14 }, { wch: 14 }, { wch: 12 },
               { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
               { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }
             ];
@@ -5533,8 +5892,11 @@
 
       const memberExpenseHeader = [
         "日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "幣別", "原始消費金額", "每人平均金額（原幣）", "每人平均參考台幣",
-        "支付者", "付款方式", "帳單幣別", "信用卡實際帳單金額",
+        "原消費幣別", "原消費金額", "每人平均金額（原幣）",
+        "實際刷卡幣別", "實際刷卡金額",
+        "帳單幣別", "實際帳單金額",
+        "每人平均參考台幣",
+        "支付者", "付款方式",
         "退稅狀態", "退稅日期", "退稅方式", "退稅幣別", "退稅金額",
         "退稅收款人", "該成員退稅參考台幣", "該成員淨參考台幣"
       ];
@@ -5566,11 +5928,13 @@
             item.currency,
             safeNumber(item.amount),
             personalOriginalAmount,
+            isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardCurrency(item) : "",
+            isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardAmount(item) : "",
+            hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
+            hasActualCardBill(item) ? getActualBillAmount(item) : "",
             memberNetTwd,
             item.payer === "FUND" ? "公基金" : (item.payer || ""),
             item.payer === "FUND" ? "公基金" : (isCreditCardExpense(item) ? "信用卡" : "現金"),
-            hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
-            hasActualCardBill(item) ? getActualBillAmount(item) : "",
             getExcelRefundStatusText(item),
             isTaxRefundEnabled(item) ? (item.taxRefundDate || "") : "",
             getExcelRefundMethodText(item),
@@ -5583,7 +5947,7 @@
         });
 
         const memberReferenceTwdTotal = memberRows.reduce(
-          (sum, row) => sum + safeNumber(row[8]),
+          (sum, row) => sum + safeNumber(row[12]),
           0
         );
 
@@ -5617,18 +5981,19 @@
 
         if (memberRows.length) {
           rows.push([
-            "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "", "", "", "",
             "合計",
             memberReferenceTwdTotal,
-            "", "", "", "", "", "", "", "", "", "", "", ""
+            "", "", "", "", "", "", "", "", "", ""
           ]);
         }
 
         const sheet = XLSX.utils.aoa_to_sheet(rows);
         sheet["!cols"] = [
           { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
-          { wch: 9 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
-          { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 },
+          { wch: 12 }, { wch: 14 }, { wch: 20 },
+          { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
+          { wch: 18 }, { wch: 14 }, { wch: 12 },
           { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
           { wch: 14 }, { wch: 20 }, { wch: 18 }
         ];
@@ -5659,8 +6024,8 @@
 
         if (memberRows.length) {
           const totalRowNumber = rows.length;
-          const totalLabelCell = sheet[`H${totalRowNumber}`];
-          const totalValueCell = sheet[`I${totalRowNumber}`];
+          const totalLabelCell = sheet[`L${totalRowNumber}`];
+          const totalValueCell = sheet[`M${totalRowNumber}`];
 
           if (totalLabelCell) {
             totalLabelCell.s = {
@@ -5694,7 +6059,10 @@
 
       const refundDetailHeader = [
         "消費日期", "分類", "備註", "消費類型", "分攤／歸屬成員",
-        "原消費幣別", "原消費金額", "原消費參考台幣",
+        "原消費幣別", "原消費金額",
+        "實際刷卡幣別", "實際刷卡金額",
+        "帳單幣別", "實際帳單金額",
+        "原消費參考台幣",
         "退稅狀態", "退稅日期", "退稅方式", "退稅幣別", "退稅金額",
         "退稅收款人", "退稅參考台幣", "淨參考台幣"
       ];
@@ -5709,6 +6077,10 @@
           personal ? getPersonalExpenseOwner(item) : getSharedExpenseMembers(item).join("、"),
           item.currency,
           safeNumber(item.amount),
+          isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardCurrency(item) : "",
+          isCreditCardExpense(item) && hasActualCardTransaction(item) ? getActualCardAmount(item) : "",
+          hasActualCardBill(item) ? getActualBillCurrency(item) : (isCreditCardExpense(item) ? (item.billCurrency || "") : ""),
+          hasActualCardBill(item) ? getActualBillAmount(item) : "",
           getExcelGrossReferenceTwd(item),
           getExcelRefundStatusText(item),
           item.taxRefundDate || "",
@@ -5728,7 +6100,9 @@
       const refundSheet = XLSX.utils.aoa_to_sheet(refundSheetRows);
       refundSheet["!cols"] = [
         { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 24 },
-        { wch: 12 }, { wch: 14 }, { wch: 16 },
+        { wch: 12 }, { wch: 14 },
+        { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
+        { wch: 16 },
         { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
         { wch: 14 }, { wch: 16 }, { wch: 14 }
       ];
@@ -6065,33 +6439,65 @@
       updateTaxRefundUi();
     });
     $("paymentMethodCash").addEventListener("click", () => {
+      $("expenseActualCardAmount").value = "";
       $("expenseActualBillAmount").value = "";
       $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
       setPaymentMethod("cash");
     });
     $("paymentMethodCard").addEventListener("click", () => {
       setPaymentMethod("card");
+      updateCardTransactionUi();
       syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      updatePaymentMethodUi();
+    });
+
+    $("cardTransactionSameBtn").addEventListener("click", () => {
+      setCardTransactionMode("same");
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      updatePaymentMethodUi();
+    });
+
+    $("cardTransactionPendingBtn").addEventListener("click", () => {
+      setCardTransactionMode("pending");
+      if ($("expenseActualBillAmount").dataset.autoFilledFromExpense === "true") {
+        $("expenseActualBillAmount").value = "";
+        $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+      }
+      updatePaymentMethodUi();
+    });
+
+    $("cardTransactionOtherBtn").addEventListener("click", () => {
+      setCardTransactionMode("other", {
+        preferredCurrency: $("expenseActualCardCurrency").value || $("expenseCurrency").value
+      });
       updatePaymentMethodUi();
     });
     $("expenseAmount").addEventListener("input", () => {
       if ($("expensePaymentMethod").value === "card") {
-        const sameCurrency = $("expenseCurrency").value === $("expenseBillCurrency").value;
-        if (sameCurrency) {
-          syncSameCurrencyCardBillAmount({ force: true });
-        } else {
-          $("expenseActualBillAmount").value = "";
-          $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
+        if (getFormCardTransactionMode() === "same") {
+          $("expenseActualCardAmount").value = safeNumber($("expenseAmount").value) > 0
+            ? String(safeNumber($("expenseAmount").value))
+            : "";
         }
+        updateCardTransactionUi();
+        syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
       }
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
     $("expenseCurrency").addEventListener("change", () => {
+      if ($("expensePaymentMethod").value === "card" && getFormCardTransactionMode() === "same") {
+        renderActualCardCurrencyOptions($("expenseCurrency").value);
+        $("expenseActualCardCurrency").value = $("expenseCurrency").value;
+        $("expenseActualCardAmount").value = safeNumber($("expenseAmount").value) > 0
+          ? String(safeNumber($("expenseAmount").value))
+          : "";
+      }
       syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
       if ($("expenseTaxRefundEnabled").value !== "true") {
         renderTaxRefundCurrencyOptions($("expenseCurrency").value);
       }
+      updateCardTransactionUi();
       updateExpenseTwdPreview();
       updatePaymentMethodUi();
     });
@@ -6106,6 +6512,18 @@
         renderShareMemberChips();
       }
     });
+    $("expenseActualCardAmount").addEventListener("input", () => {
+      updateCardTransactionUi();
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      updatePaymentMethodUi();
+    });
+
+    $("expenseActualCardCurrency").addEventListener("change", () => {
+      updateCardTransactionUi();
+      syncSameCurrencyCardBillAmount({ force: true, clearWhenDifferent: true });
+      updatePaymentMethodUi();
+    });
+
     $("expenseActualBillAmount").addEventListener("input", () => {
       $("expenseActualBillAmount").dataset.autoFilledFromExpense = "false";
       updatePaymentMethodUi();
