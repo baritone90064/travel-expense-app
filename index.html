@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-v5.png?v=9" />
   <link rel="icon" type="image/png" sizes="512x512" href="./app-icon-v5.png?v=9" />
   <title>旅行記帳</title>
-  <!-- iPhone 修正版 v58：信用卡新增實際刷卡交易三層資料，Excel 保留原消費/實際刷卡/實際帳單 -->
+  <!-- iPhone 修正版 v59：移除信用卡「實際刷卡交易」區塊下方咖啡色備註文字 -->
 
   <style>
     :root {
@@ -841,8 +841,6 @@
                   <input id="expenseActualCardAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" />
                 </div>
               </div>
-              <div id="creditCardTransactionStatus" class="card-billing-status"></div>
-
               <label class="card-section-label" for="expenseActualBillAmount">信用卡帳單實際金額</label>
               <div class="card-billing-grid">
                 <select id="expenseBillCurrency" aria-label="帳單幣別"></select>
@@ -2432,30 +2430,7 @@
     }
 
     function updateCardTransactionUi() {
-      const status = $("creditCardTransactionStatus");
-      if (!status) return;
-
-      const cardPaid = $("expensePaymentMethod")?.value === "card" && $("expensePayer")?.value !== "FUND";
-      if (!cardPaid) {
-        status.textContent = "";
-        return;
-      }
-
-      const mode = getFormCardTransactionMode();
-      if (mode === "pending") {
-        status.textContent = "實際刷卡幣別／金額待確認";
-        return;
-      }
-
-      const currency = getFormActualCardCurrency();
-      const amount = getFormActualCardAmount();
-      if (currency && amount > 0) {
-        status.textContent = `實際刷卡：${formatMoney(amount, currency)}`;
-      } else if (mode === "other") {
-        status.textContent = "請輸入實際刷卡幣別與金額";
-      } else {
-        status.textContent = "實際刷卡將與原消費幣別／金額相同";
-      }
+      // v59：實際刷卡交易區塊不再顯示下方咖啡色備註文字。
     }
 
     function syncSameCurrencyCardBillAmount(options = {}) {
@@ -2510,7 +2485,6 @@
       const cardPaid = $("expensePaymentMethod").value === "card" && !fundPaid;
       box.classList.toggle("hidden", !cardPaid);
       if (!cardPaid) {
-        $("creditCardTransactionStatus").textContent = "";
         $("creditCardBillingStatus").textContent = "";
         return;
       }
